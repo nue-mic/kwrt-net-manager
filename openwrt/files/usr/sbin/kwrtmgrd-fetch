@@ -18,12 +18,16 @@
 #     option download_proxy 'https://my.mirror/'  指定单一公共代理（跳过内置公共代理列表）
 #     option no_proxy '1'              跳过自建源 + 公共代理，直连 GitHub
 #     option release_proxy_bases 'https://a,https://b'  覆盖内置自建 gh-raw 域名列表（逗号分隔）
-#     option install_proxy_key 'frpc-mgr-releases'  覆盖自建源的资源键（一般无需改）
+#     option install_proxy_key 'kwrt-net-mgr-releases'  覆盖自建源的资源键（一般无需改）
 # =============================================================================
 set -eu
 
 REPO="mia-clark/kwrt-net-manager"
+# 二进制名（解压后安装到 /usr/bin 的可执行文件）
 BIN_NAME="kwrtmgrd"
+# Release 资产前缀（tar.gz = ${ASSET_NAME}_<ver>_linux_<arch>.tar.gz，与 GitHub
+# Release / gh-raw 镜像上的资产名一致；二进制内部仍为 ${BIN_NAME}）
+ASSET_NAME="kwrt-net-manager"
 INSTALL_DIR="/usr/bin"
 LIBDIR="/usr/lib/kwrtmgrd"
 
@@ -39,7 +43,7 @@ https://gh-raw.s05.qzz.io
 https://gh-raw.s06.qzz.io
 https://gh-raw.s07.qzz.io
 "
-GHRAW_KEY_DEFAULT="frpc-mgr-releases"
+GHRAW_KEY_DEFAULT="kwrt-net-mgr-releases"
 
 # 公共 GitHub 代理（仅作兜底；自建源全失败才用）
 DL_PROXIES="
@@ -267,7 +271,7 @@ space_ok() {
 # ---------------------------------------------------------------------------
 log "[2/4] 探测 CPU 架构"
 TOKEN="$(detect_token)"
-ASSET="${BIN_NAME}_${VERSION}_linux_${TOKEN}.tar.gz"
+ASSET="${ASSET_NAME}_${VERSION}_linux_${TOKEN}.tar.gz"
 GH_URL="https://github.com/${REPO}/releases/download/v${VERSION}/${ASSET}"
 log "  CPU: $(uname -m 2>/dev/null || echo unknown)  →  资产架构 ${TOKEN}"
 log "  资产文件: ${ASSET}"

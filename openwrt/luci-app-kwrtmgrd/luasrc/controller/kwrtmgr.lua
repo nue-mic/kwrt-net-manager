@@ -24,7 +24,7 @@ local DL_LOCK = "/tmp/kwrtmgrd-fetch.running"
 function index()
 	if not fs.access("/etc/config/kwrtmgrd") then return end
 	entry({"admin", "services", "kwrtmgr"},
-		template("kwrtmgr/main"), _("FRPC Manager"), 60).dependent = true
+		template("kwrtmgr/main"), _("OP增强爱快系统"), 60).dependent = true
 	entry({"admin", "services", "kwrtmgr", "info"},            call("action_info"))
 	entry({"admin", "services", "kwrtmgr", "save"},            call("action_save"))
 	entry({"admin", "services", "kwrtmgr", "download"},        call("action_download"))

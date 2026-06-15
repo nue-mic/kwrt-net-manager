@@ -9,6 +9,8 @@
 # 一行安装 (推荐, 支持交互):
 #   sh -c "$(curl -fsSL https://raw.githubusercontent.com/mia-clark/kwrt-net-manager/main/scripts/install.sh)"
 #   sh -c "$(wget -qO- https://raw.githubusercontent.com/mia-clark/kwrt-net-manager/main/scripts/install.sh)"
+#   国内加速 (自建 gh-raw 脚本镜像, key=kwrt-net-mgr):
+#   sh -c "$(curl -fsSL https://gh-raw.966788.xyz/kwrt-net-mgr/install.sh)"
 #
 # 非交互 / 自定义示例:
 #   sh install.sh --yes --port 9000 --token mysecret
@@ -26,6 +28,8 @@ set -eu
 # ----------------------------------------------------------------------------
 REPO="mia-clark/kwrt-net-manager"
 BIN_NAME="kwrtmgrd"
+# Release 资产前缀（tar.gz = ${ASSET_NAME}_<ver>_<os>_<arch>.tar.gz；二进制内部仍为 ${BIN_NAME}）
+ASSET_NAME="kwrt-net-manager"
 INSTALL_DIR="/usr/local/bin"
 SERVICE_NAME="kwrtmgrd"
 DEFAULT_PORT="18080"
@@ -54,7 +58,7 @@ https://docker.966788.xyz/
 #   - 版本查询: GET {base}/{key}/latest      -> JSON, 取 "tag" 字段
 #   - 资产下载: GET {base}/{key}/{tag}/{file} -> 二进制流
 #   - 7 个等价域名 (2 个 .xyz 主域名在前, 5 个 .qzz.io 备用在后), 任一不可用自动切下一个
-#   - kwrtmgrd 二进制的配置键 (key) = frpc-mgr-releases
+#   - kwrtmgrd 二进制的配置键 (key) = kwrt-net-mgr-releases
 #   - 可经环境变量覆盖: KWRTNET_RELEASE_PROXY_BASES (逗号分隔域名) / KWRTNET_INSTALL_PROXY_KEY (键)
 #   - 该通道为首选; 失败后回落到上面的 DL_PROXIES + GitHub 直连逻辑
 if [ -n "${KWRTNET_RELEASE_PROXY_BASES:-}" ]; then
@@ -71,7 +75,7 @@ https://gh-raw.s06.qzz.io
 https://gh-raw.s07.qzz.io
 "
 fi
-GHRAW_KEY="${KWRTNET_INSTALL_PROXY_KEY:-frpc-mgr-releases}"
+GHRAW_KEY="${KWRTNET_INSTALL_PROXY_KEY:-kwrt-net-mgr-releases}"
 
 # 这些值会在 detect_platform / 参数解析阶段被填充
 OS=""
@@ -165,10 +169,10 @@ ${C_BOLD}kwrtmgrd 一键安装脚本${C_RST}
   KWRTNET_DOWNLOAD_PROXY=https://my.mirror/   # 等价 --proxy
   KWRTNET_NO_PROXY=1                           # 等价 --no-proxy
   KWRTNET_RELEASE_PROXY_BASES=https://a,https://b  # 覆盖自建 gh-raw 域名 (逗号分隔)
-  KWRTNET_INSTALL_PROXY_KEY=frpc-mgr-releases  # 覆盖 gh-raw 资产配置键 (key)
+  KWRTNET_INSTALL_PROXY_KEY=kwrt-net-mgr-releases  # 覆盖 gh-raw 资产配置键 (key)
 
 下载策略 (按优先级回落):
-  1) 首选自建 gh-raw 通道 (默认 7 个域名, key=frpc-mgr-releases): 版本与二进制都走
+  1) 首选自建 gh-raw 通道 (默认 7 个域名, key=kwrt-net-mgr-releases): 版本与二进制都走
      {域名}/{key}/... , 任一域名失败/返回非法包自动切下一家;
   2) 回落内置 GitHub 镜像数组 (公开 4 家在前, 自建 6 家在后), 取第一个能解开为合法包的;
   3) 再回落直连 GitHub。
@@ -390,6 +394,15 @@ ensure_root() {
 # 以特权执行命令
 priv() { $SUDO "$@"; }
 
+# 安装文件 (mode src dst)。busybox 默认无 install applet (OpenWrt 等)，自动回退 cp + chmod。
+install_file() {
+    if command -v install >/dev/null 2>&1; then
+        priv install -m "$1" "$2" "$3"
+    else
+        priv cp "$2" "$3" && priv chmod "$1" "$3"
+    fi
+}
+
 # ----------------------------------------------------------------------------
 # 交互读取 (从 /dev/tty 读, 这样 curl|sh 管道里也能交互)
 #   用法: prompt <提示语> <默认值>  -> 结果写入全局 REPLY
@@ -553,7 +566,7 @@ confirm_install() {
 # ----------------------------------------------------------------------------
 download_and_install() {
     _ver_num="${VERSION#v}"   # 文件名里的版本号不带 v
-    _asset="${BIN_NAME}_${_ver_num}_${OS}_${ARCH}.tar.gz"
+    _asset="${ASSET_NAME}_${_ver_num}_${OS}_${ARCH}.tar.gz"
     _url="https://github.com/${REPO}/releases/download/${VERSION}/${_asset}"
 
     TMP_DIR="$(mktemp -d 2>/dev/null || mktemp -d -t frpmgr)"
@@ -596,7 +609,7 @@ download_and_install() {
 
     info "安装到 ${INSTALL_DIR}/${BIN_NAME}"
     priv mkdir -p "$INSTALL_DIR"
-    priv install -m 0755 "${TMP_DIR}/${BIN_NAME}" "${INSTALL_DIR}/${BIN_NAME}"
+    install_file 0755 "${TMP_DIR}/${BIN_NAME}" "${INSTALL_DIR}/${BIN_NAME}"
     ok "二进制安装完成: $(${INSTALL_DIR}/${BIN_NAME} version 2>/dev/null || echo "${INSTALL_DIR}/${BIN_NAME}")"
 }
 
@@ -620,7 +633,7 @@ KWRTNET_DOCS_ENABLED=true
 # 是否允许在 Web 后台「关于」页一键自更新并重启 (true/false)
 KWRTNET_SELF_UPDATE_ENABLED=true
 EOF
-    priv install -m 0600 "$_tmp_env" "$ENV_FILE"
+    install_file 0600 "$_tmp_env" "$ENV_FILE"
 }
 
 # ----------------------------------------------------------------------------
@@ -669,7 +682,7 @@ ReadWritePaths=${DATA_DIR}
 [Install]
 WantedBy=multi-user.target
 EOF
-    priv install -m 0644 "$_tmp_unit" "$_unit"
+    install_file 0644 "$_tmp_unit" "$_unit"
     priv systemctl daemon-reload
     priv systemctl enable "${SERVICE_NAME}" >/dev/null 2>&1 || true
     priv systemctl restart "${SERVICE_NAME}"
@@ -701,7 +714,7 @@ start_pre() {
     set +a
 }
 EOF
-    priv install -m 0755 "$_tmp_init" "$_init"
+    install_file 0755 "$_tmp_init" "$_init"
     priv rc-update add "${SERVICE_NAME}" default >/dev/null 2>&1 || true
     priv rc-service "${SERVICE_NAME}" restart
     ok "OpenRC 服务已启用并设置为开机自启"
@@ -749,16 +762,50 @@ setup_launchd() {
 </dict>
 </plist>
 EOF
-    priv install -m 0644 "$_tmp_plist" "$_plist"
+    install_file 0644 "$_tmp_plist" "$_plist"
     priv launchctl unload "$_plist" >/dev/null 2>&1 || true
     priv launchctl load -w "$_plist"
     ok "launchd 服务已加载并设置为开机自启"
+}
+
+setup_procd() {
+    _init="/etc/init.d/${SERVICE_NAME}"
+    info "创建 OpenWrt procd 服务: ${_init}"
+    if [ -f "/etc/config/${SERVICE_NAME}" ]; then
+        warn "检测到 ipk 的 UCI 配置 /etc/config/${SERVICE_NAME}：install.sh 改用 env 文件方式管理"
+        warn "OpenWrt 推荐用 ipk(opkg) 安装；此 procd 分支仅为 curl|sh 兜底"
+    fi
+    # procd 脚本: 从 ENV_FILE 读 KWRTNET_*，显式注入给实例 (procd 不自动继承环境)
+    _tmp_init="${TMP_DIR}/${SERVICE_NAME}.procd"
+    cat > "$_tmp_init" <<EOF
+#!/bin/sh /etc/rc.common
+# kwrtmgrd procd 服务 (由 install.sh 生成；配置读自 ${ENV_FILE})
+USE_PROCD=1
+START=95
+STOP=01
+
+start_service() {
+    [ -f "${ENV_FILE}" ] && . "${ENV_FILE}"
+    procd_open_instance
+    procd_set_param command "${INSTALL_DIR}/${BIN_NAME}" serve
+    procd_set_param env KWRTNET_API_TOKEN="\$KWRTNET_API_TOKEN" KWRTNET_HTTP_ADDR="\$KWRTNET_HTTP_ADDR" KWRTNET_DATA_DIR="\$KWRTNET_DATA_DIR" KWRTNET_LOG_LEVEL="\$KWRTNET_LOG_LEVEL" KWRTNET_CORS_ORIGINS="\$KWRTNET_CORS_ORIGINS" KWRTNET_DOCS_ENABLED="\$KWRTNET_DOCS_ENABLED" KWRTNET_SELF_UPDATE_ENABLED="\$KWRTNET_SELF_UPDATE_ENABLED"
+    procd_set_param respawn
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    procd_close_instance
+}
+EOF
+    install_file 0755 "$_tmp_init" "$_init"
+    priv "$_init" enable >/dev/null 2>&1 || true
+    priv "$_init" restart
+    ok "procd 服务已启用并设置为开机自启 (日志: logread -e ${SERVICE_NAME})"
 }
 
 setup_service() {
     _init="$(detect_init_system)"
     case "$_init" in
         systemd) setup_systemd ;;
+        procd)   setup_procd ;;
         openrc)  setup_openrc ;;
         launchd) setup_launchd ;;
         none)
@@ -828,6 +875,7 @@ if [ -n "${KWRTNET_INSTALL_URL:-}" ]; then RAW_URL="$KWRTNET_INSTALL_URL"; fi
 detect_init() {
     if [ "$(uname -s 2>/dev/null)" = "Darwin" ]; then echo "launchd"; return; fi
     if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then echo "systemd"; return; fi
+    if [ -x /sbin/procd ] && [ -e /etc/rc.common ]; then echo "procd"; return; fi
     if command -v rc-service >/dev/null 2>&1; then echo "openrc"; return; fi
     echo "none"
 }
@@ -848,6 +896,7 @@ env_get() {
 cmd_start() {
     case "$(detect_init)" in
         systemd) priv systemctl start "$SERVICE_NAME"; ok "服务已启动" ;;
+        procd)   priv /etc/init.d/"$SERVICE_NAME" start; ok "服务已启动" ;;
         openrc)  priv rc-service "$SERVICE_NAME" start; ok "服务已启动" ;;
         launchd) priv launchctl load -w "$PLIST"; ok "服务已启动" ;;
         *)       die "未识别到服务管理器, 无法操作" ;;
@@ -856,6 +905,7 @@ cmd_start() {
 cmd_stop() {
     case "$(detect_init)" in
         systemd) priv systemctl stop "$SERVICE_NAME"; ok "服务已停止" ;;
+        procd)   priv /etc/init.d/"$SERVICE_NAME" stop; ok "服务已停止" ;;
         openrc)  priv rc-service "$SERVICE_NAME" stop; ok "服务已停止" ;;
         launchd) priv launchctl unload "$PLIST"; ok "服务已停止" ;;
         *)       die "未识别到服务管理器, 无法操作" ;;
@@ -864,6 +914,7 @@ cmd_stop() {
 cmd_restart() {
     case "$(detect_init)" in
         systemd) priv systemctl restart "$SERVICE_NAME"; ok "服务已重启" ;;
+        procd)   priv /etc/init.d/"$SERVICE_NAME" restart; ok "服务已重启" ;;
         openrc)  priv rc-service "$SERVICE_NAME" restart; ok "服务已重启" ;;
         launchd) priv launchctl unload "$PLIST" >/dev/null 2>&1 || true
                  priv launchctl load -w "$PLIST"; ok "服务已重启" ;;
@@ -873,6 +924,7 @@ cmd_restart() {
 cmd_status() {
     case "$(detect_init)" in
         systemd) priv systemctl status "$SERVICE_NAME" --no-pager ;;
+        procd)   priv /etc/init.d/"$SERVICE_NAME" status 2>/dev/null || { priv /etc/init.d/"$SERVICE_NAME" running >/dev/null 2>&1 && echo "running" || echo "stopped"; } ;;
         openrc)  priv rc-service "$SERVICE_NAME" status ;;
         launchd) priv launchctl list 2>/dev/null | grep "$SERVICE_NAME" || echo "服务未在运行" ;;
         *)       die "未识别到服务管理器, 无法操作" ;;
@@ -881,6 +933,7 @@ cmd_status() {
 cmd_enable() {
     case "$(detect_init)" in
         systemd) priv systemctl enable "$SERVICE_NAME"; ok "已设置开机自启" ;;
+        procd)   priv /etc/init.d/"$SERVICE_NAME" enable; ok "已设置开机自启" ;;
         openrc)  priv rc-update add "$SERVICE_NAME" default; ok "已设置开机自启" ;;
         launchd) priv launchctl load -w "$PLIST"; ok "已设置开机自启" ;;
         *)       die "未识别到服务管理器, 无法操作" ;;
@@ -889,6 +942,7 @@ cmd_enable() {
 cmd_disable() {
     case "$(detect_init)" in
         systemd) priv systemctl disable "$SERVICE_NAME"; ok "已取消开机自启" ;;
+        procd)   priv /etc/init.d/"$SERVICE_NAME" disable; ok "已取消开机自启" ;;
         openrc)  priv rc-update del "$SERVICE_NAME" default; ok "已取消开机自启" ;;
         launchd) priv launchctl unload -w "$PLIST"; ok "已取消开机自启" ;;
         *)       die "未识别到服务管理器, 无法操作" ;;
@@ -901,6 +955,10 @@ cmd_logs() {
         systemd)
             if [ -n "$_follow" ]; then priv journalctl -u "$SERVICE_NAME" -f
             else priv journalctl -u "$SERVICE_NAME" -n 200 --no-pager; fi
+            ;;
+        procd)
+            if [ -n "$_follow" ]; then priv logread -f -e "$SERVICE_NAME"
+            else priv logread -e "$SERVICE_NAME" | tail -n 200; fi
             ;;
         *)
             _log="/var/log/${SERVICE_NAME}.log"
@@ -997,6 +1055,9 @@ cmd_info() {
         systemd) _svc="/etc/systemd/system/${SERVICE_NAME}.service"
                  _state="$(systemctl is-active "$SERVICE_NAME" 2>/dev/null || true)"; [ -n "$_state" ] || _state="unknown"
                  _logc="journalctl -u ${SERVICE_NAME} -f" ;;
+        procd)   _svc="/etc/init.d/${SERVICE_NAME}"
+                 if /etc/init.d/"$SERVICE_NAME" running >/dev/null 2>&1; then _state="active"; else _state="stopped"; fi
+                 _logc="logread -f -e ${SERVICE_NAME}" ;;
         openrc)  _svc="/etc/init.d/${SERVICE_NAME}"
                  if rc-service "$SERVICE_NAME" status >/dev/null 2>&1; then _state="active"; else _state="stopped"; fi
                  _logc="tail -f /var/log/${SERVICE_NAME}.log" ;;
@@ -1062,6 +1123,7 @@ cmd_upgrade_legacy() {
     [ -e "$OLD_BIN" ] && _need=1
     case "$_init" in
         systemd) [ -f "/etc/systemd/system/${OLD_SVC}.service" ] && _need=1 ;;
+        procd)   [ -f "/etc/init.d/${OLD_SVC}" ] && _need=1 ;;
         openrc)  [ -f "/etc/init.d/${OLD_SVC}" ] && _need=1 ;;
         launchd) [ -f "$OLD_PLIST" ] && _need=1 ;;
     esac
@@ -1078,6 +1140,10 @@ cmd_upgrade_legacy() {
             priv systemctl stop "$SERVICE_NAME" 2>/dev/null || true
             priv systemctl stop "$OLD_SVC" 2>/dev/null || true
             priv systemctl disable "$OLD_SVC" 2>/dev/null || true ;;
+        procd)
+            priv /etc/init.d/"$SERVICE_NAME" stop 2>/dev/null || true
+            priv /etc/init.d/"$OLD_SVC" stop 2>/dev/null || true
+            priv /etc/init.d/"$OLD_SVC" disable 2>/dev/null || true ;;
         openrc)
             priv rc-service "$SERVICE_NAME" stop 2>/dev/null || true
             priv rc-service "$OLD_SVC" stop 2>/dev/null || true
@@ -1115,6 +1181,7 @@ cmd_upgrade_legacy() {
     # 5. 清理旧服务单元与二进制
     case "$_init" in
         systemd) priv rm -f "/etc/systemd/system/${OLD_SVC}.service"; priv systemctl daemon-reload 2>/dev/null || true ;;
+        procd)   priv rm -f "/etc/init.d/${OLD_SVC}" ;;
         openrc)  priv rm -f "/etc/init.d/${OLD_SVC}" ;;
         launchd) priv rm -f "$OLD_PLIST" ;;
     esac
@@ -1186,7 +1253,7 @@ esac
 cli_tip
 FMC_EOF
 
-    priv install -m 0755 "$_tmp_cli" "$_cli"
+    install_file 0755 "$_tmp_cli" "$_cli"
     # 迁移: 管理命令已由 fms 更名为 kmc, 清除旧版遗留的 fms (升级 / 重装时自动完成)
     if [ -e "${INSTALL_DIR}/fms" ]; then
         priv rm -f "${INSTALL_DIR}/fms" 2>/dev/null || true
@@ -1232,6 +1299,14 @@ restart_service() {
                 ok "systemd 服务已重启"
             else
                 warn "未发现 systemd 服务单元, 跳过重启 (可重新安装以注册服务)"
+            fi
+            ;;
+        procd)
+            if [ -f "/etc/init.d/${SERVICE_NAME}" ]; then
+                priv /etc/init.d/"${SERVICE_NAME}" restart
+                ok "procd 服务已重启"
+            else
+                warn "未发现 procd 服务, 跳过重启"
             fi
             ;;
         openrc)
@@ -1478,6 +1553,12 @@ do_uninstall() {
             priv rm -f "/etc/systemd/system/${SERVICE_NAME}.service"
             priv systemctl daemon-reload || true
             ok "已移除 systemd 服务"
+            ;;
+        procd)
+            priv /etc/init.d/"${SERVICE_NAME}" stop >/dev/null 2>&1 || true
+            priv /etc/init.d/"${SERVICE_NAME}" disable >/dev/null 2>&1 || true
+            priv rm -f "/etc/init.d/${SERVICE_NAME}"
+            ok "已移除 procd 服务"
             ;;
         openrc)
             priv rc-service "${SERVICE_NAME}" stop >/dev/null 2>&1 || true

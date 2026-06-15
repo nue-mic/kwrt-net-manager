@@ -89,9 +89,9 @@ type Branding struct {
 // Default branding values for the KWRT network manager. Used as fallback
 // whenever a field is unset/empty.
 const (
-	DefaultAppName     = "KWRT 网络管理"
-	DefaultAppSubtitle = "DHCP · 静态路由"
-	DefaultHTMLTitle   = "KWRT 网络管理 · DHCP / 静态路由控制台"
+	DefaultAppName     = "OP增强爱快系统"
+	DefaultAppSubtitle = "仿爱快 · DHCP / 静态路由"
+	DefaultHTMLTitle   = "OP增强爱快系统 · DHCP / 静态路由控制台"
 )
 
 // Effective returns a copy with every empty field filled from the defaults.

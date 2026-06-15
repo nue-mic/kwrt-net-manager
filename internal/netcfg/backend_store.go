@@ -15,13 +15,19 @@ import (
 // State to a JSON file and synthesizes a plausible lease table, interface list
 // and routing table so every page works end-to-end without an OpenWrt host.
 type storeBackend struct {
-	path string
-	log  *slog.Logger
-	mu   sync.Mutex
-	st   State
+	path  string
+	log   *slog.Logger
+	mu    sync.Mutex
+	st    State
+	fresh bool // true when netcfg.json was absent at open (first run)
 }
 
-func newStoreBackend(path string, log *slog.Logger) (*storeBackend, error) {
+// newStoreBackend opens (or creates) the sidecar JSON. seed=true plants demo
+// data on a fresh file (dev/store backend only); the uci backend passes false
+// so it never fabricates DHCP servers on a real OpenWrt box (it imports the
+// machine's existing config instead). b.fresh records whether the file was
+// absent, so the uci backend knows to import on first run.
+func newStoreBackend(path string, log *slog.Logger, seed bool) (*storeBackend, error) {
 	b := &storeBackend{path: path, log: log}
 	raw, err := os.ReadFile(path)
 	switch {
@@ -30,7 +36,10 @@ func newStoreBackend(path string, log *slog.Logger) (*storeBackend, error) {
 			return nil, fmt.Errorf("parse netcfg.json: %w", e)
 		}
 	case os.IsNotExist(err):
-		b.st = seedState()
+		b.fresh = true
+		if seed {
+			b.st = seedState()
+		}
 		if e := b.flushLocked(); e != nil {
 			return nil, e
 		}
@@ -39,6 +48,16 @@ func newStoreBackend(path string, log *slog.Logger) (*storeBackend, error) {
 	}
 	b.normalize()
 	return b, nil
+}
+
+// replaceState swaps the whole managed state and persists it. Used by the uci
+// backend after importing the machine's existing config.
+func (b *storeBackend) replaceState(st State) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.st = st
+	b.normalize()
+	return b.flushLocked()
 }
 
 func (b *storeBackend) normalize() {

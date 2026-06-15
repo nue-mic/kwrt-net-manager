@@ -16,46 +16,50 @@ const (
 
 // CustomOption is one custom DHCP option (iKuai 自定义DHCP选项).
 type CustomOption struct {
-	Code  int    `json:"code"`            // DHCP option number, e.g. 43, 66, 121
-	Value string `json:"value"`           // option value (string / IPv4 / hex per code)
-	Type  string `json:"type,omitempty"`  // "string" | "ip" | "hex" (presentation hint)
+	Code  int    `json:"code"`           // DHCP option number, e.g. 43, 66, 121
+	Value string `json:"value"`          // option value (string / IPv4 / hex per code)
+	Type  string `json:"type,omitempty"` // "string" | "ip" | "hex" (presentation hint)
 }
 
 // DHCPServer is one DHCP address pool bound to an interface (iKuai DHCP服务端).
 // Maps to an OpenWrt `config dhcp` section.
 type DHCPServer struct {
-	ID            string         `json:"id"`
-	Interface     string         `json:"interface"`            // 服务接口（lan/lan1/...）
-	Enabled       bool           `json:"enabled"`              // 状态（启用/停用）
-	IPStart       string         `json:"ip_start"`             // 客户端地址-起
-	IPEnd         string         `json:"ip_end"`               // 客户端地址-止
-	Netmask       string         `json:"netmask"`              // 子网掩码
-	Gateway       string         `json:"gateway"`              // 网关
-	DNSPrimary    string         `json:"dns_primary"`          // 首选/主 DNS
-	DNSSecondary  string         `json:"dns_secondary"`        // 备选/次 DNS
-	LeaseMinutes  int            `json:"lease_minutes"`        // 租期（分钟）
-	Exclude       []string       `json:"exclude"`              // 排除地址（每行一条）
-	ExpiredKeepHours int         `json:"expired_keep_hours"`   // 过期地址保留时间（小时）
-	CheckIP       bool           `json:"check_ip"`             // 检查接口 IP 有效性
-	RelayOnly     bool           `json:"relay_only"`           // 只应用于 DHCP 中继
-	AssocInterface string        `json:"assoc_interface"`      // 关联接口（默认 all/全部线路）
-	CustomOptions []CustomOption `json:"custom_options"`       // 自定义 DHCP 选项
-	Remaining     int            `json:"remaining"`            // 剩余地址（只读，计算值）
+	ID               string         `json:"id"`
+	Interface        string         `json:"interface"`          // 服务接口（lan/lan1/...）
+	Enabled          bool           `json:"enabled"`            // 状态（启用/停用）
+	IPStart          string         `json:"ip_start"`           // 客户端地址-起
+	IPEnd            string         `json:"ip_end"`             // 客户端地址-止
+	Netmask          string         `json:"netmask"`            // 子网掩码
+	Gateway          string         `json:"gateway"`            // 网关
+	DNSPrimary       string         `json:"dns_primary"`        // 首选/主 DNS
+	DNSSecondary     string         `json:"dns_secondary"`      // 备选/次 DNS
+	LeaseMinutes     int            `json:"lease_minutes"`      // 租期（分钟）
+	Exclude          []string       `json:"exclude"`            // 排除地址（每行一条）
+	ExpiredKeepHours int            `json:"expired_keep_hours"` // 过期地址保留时间（小时）
+	CheckIP          bool           `json:"check_ip"`           // 检查接口 IP 有效性
+	RelayOnly        bool           `json:"relay_only"`         // 只应用于 DHCP 中继
+	AssocInterface   string         `json:"assoc_interface"`    // 关联接口（默认 all/全部线路）
+	CustomOptions    []CustomOption `json:"custom_options"`     // 自定义 DHCP 选项
+	Remaining        int            `json:"remaining"`          // 剩余地址（只读，计算值）
+	// Managed 标记该项是否由本工具管理（写入 UCI）。导入的存量项为 false（仅显示），
+	// 用户创建/编辑后置 true。uci 后端只把 Managed=true 的项投射到 /etc/config。
+	Managed bool `json:"managed,omitempty"`
 }
 
 // StaticLease is a DHCP reservation binding a MAC to a fixed IP (iKuai DHCP静态分配).
 // Maps to an OpenWrt `config host` section.
 type StaticLease struct {
 	ID           string `json:"id"`
-	Hostname     string `json:"hostname"`       // 主机名称（可空）
-	IP           string `json:"ip"`             // 绑定 IP
-	MAC          string `json:"mac"`            // 绑定 MAC
-	Gateway      string `json:"gateway"`        // 网关（每条可不同，dnsmasq 经 tag 下发）
-	Interface    string `json:"interface"`      // 绑定接口
+	Hostname     string `json:"hostname"`  // 主机名称（可空）
+	IP           string `json:"ip"`        // 绑定 IP
+	MAC          string `json:"mac"`       // 绑定 MAC
+	Gateway      string `json:"gateway"`   // 网关（每条可不同，dnsmasq 经 tag 下发）
+	Interface    string `json:"interface"` // 绑定接口
 	DNSPrimary   string `json:"dns_primary"`
 	DNSSecondary string `json:"dns_secondary"`
-	Remark       string `json:"remark"`         // 备注
-	Enabled      bool   `json:"enabled"`        // 状态
+	Remark       string `json:"remark"`  // 备注
+	Enabled      bool   `json:"enabled"` // 状态
+	Managed      bool   `json:"managed,omitempty"`
 }
 
 // Lease is one active DHCP lease (iKuai DHCP终端列表). Read-only; the source is
@@ -77,6 +81,7 @@ type ACLEntry struct {
 	MAC     string `json:"mac"`
 	Remark  string `json:"remark"`
 	Enabled bool   `json:"enabled"`
+	Managed bool   `json:"managed,omitempty"`
 }
 
 // ACL is the DHCP MAC access-control list (iKuai DHCP黑白名单).
@@ -104,6 +109,7 @@ type Route struct {
 	Metric    int    `json:"metric"`    // 优先级（越小越优先）
 	Remark    string `json:"remark"`    // 备注
 	Enabled   bool   `json:"enabled"`   // 状态
+	Managed   bool   `json:"managed,omitempty"`
 }
 
 // Route families.

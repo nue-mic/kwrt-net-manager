@@ -9,7 +9,7 @@ import (
 func newTestService(t *testing.T) *Service {
 	t.Helper()
 	dir := t.TempDir()
-	be, err := newStoreBackend(filepath.Join(dir, "netcfg.json"), nil)
+	be, err := newStoreBackend(filepath.Join(dir, "netcfg.json"), nil, true)
 	if err != nil {
 		t.Fatalf("newStoreBackend: %v", err)
 	}
@@ -19,7 +19,7 @@ func newTestService(t *testing.T) *Service {
 func TestStoreSeedAndPersist(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "netcfg.json")
-	be, err := newStoreBackend(path, nil)
+	be, err := newStoreBackend(path, nil, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestStoreSeedAndPersist(t *testing.T) {
 		t.Fatalf("seed servers = %+v", servers)
 	}
 	// Reopen → state persists.
-	be2, err := newStoreBackend(path, nil)
+	be2, err := newStoreBackend(path, nil, true)
 	if err != nil {
 		t.Fatal(err)
 	}

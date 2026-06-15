@@ -54,18 +54,3 @@ func managedSections(show, config string) []string {
 	}
 	return names
 }
-
-// sanitizeSectionName makes an id safe as a UCI section name (alnum + _).
-func sanitizeSectionName(id string) string {
-	var b strings.Builder
-	b.WriteString("nm_")
-	for _, r := range id {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_':
-			b.WriteRune(r)
-		default:
-			b.WriteByte('_')
-		}
-	}
-	return b.String()
-}

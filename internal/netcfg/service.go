@@ -119,6 +119,7 @@ func (s *Service) CreateDHCPServer(in DHCPServer) (DHCPServer, error) {
 		return DHCPServer{}, err
 	}
 	in.ID = s.idFn("dhcp")
+	in.Managed = true
 	in.Remaining = 0
 	servers = append(servers, in)
 	if err := s.be.SaveDHCPServers(servers); err != nil {
@@ -144,6 +145,7 @@ func (s *Service) UpdateDHCPServer(id string, in DHCPServer) (DHCPServer, error)
 		return DHCPServer{}, ErrNotFound
 	}
 	in.ID = id
+	in.Managed = true
 	servers[idx] = in
 	if err := s.be.SaveDHCPServers(servers); err != nil {
 		return DHCPServer{}, err
@@ -171,6 +173,7 @@ func (s *Service) SetDHCPServerEnabled(id string, on bool) error {
 			return nil, ErrNotFound
 		}
 		servers[idx].Enabled = on
+		servers[idx].Managed = true
 		return servers, nil
 	})
 }
@@ -185,6 +188,7 @@ func (s *Service) BatchDHCPServers(action string, ids []string) error {
 			for i := range servers {
 				if set[servers[i].ID] {
 					servers[i].Enabled = on
+					servers[i].Managed = true
 				}
 			}
 			return servers, nil
@@ -267,6 +271,7 @@ func (s *Service) CreateStatic(in StaticLease) (StaticLease, error) {
 		return StaticLease{}, err
 	}
 	in.ID = s.idFn("host")
+	in.Managed = true
 	list = append(list, in)
 	if err := s.be.SaveStatics(list, arp); err != nil {
 		return StaticLease{}, err
@@ -294,6 +299,7 @@ func (s *Service) UpdateStatic(id string, in StaticLease) (StaticLease, error) {
 		return StaticLease{}, err
 	}
 	in.ID = id
+	in.Managed = true
 	list[idx] = in
 	if err := s.be.SaveStatics(list, arp); err != nil {
 		return StaticLease{}, err
@@ -321,6 +327,7 @@ func (s *Service) SetStaticEnabled(id string, on bool) error {
 			return nil, ErrNotFound
 		}
 		list[idx].Enabled = on
+		list[idx].Managed = true
 		return list, nil
 	})
 }
@@ -335,6 +342,7 @@ func (s *Service) BatchStatics(action string, ids []string) error {
 			for i := range list {
 				if set[list[i].ID] {
 					list[i].Enabled = on
+					list[i].Managed = true
 				}
 			}
 			return list, nil
@@ -495,6 +503,7 @@ func (s *Service) FixSubnet(iface string) (int, error) {
 			continue
 		}
 		cand.ID = s.idFn("host")
+		cand.Managed = true
 		list = append(list, cand)
 		added++
 	}
@@ -561,6 +570,7 @@ func (s *Service) AddACLEntry(in ACLEntry) (ACLEntry, error) {
 		}
 	}
 	in.ID = s.idFn("acl")
+	in.Managed = true
 	acl.Entries = append(acl.Entries, in)
 	if err := s.be.SaveACL(acl); err != nil {
 		return ACLEntry{}, err
@@ -585,6 +595,7 @@ func (s *Service) UpdateACLEntry(id string, in ACLEntry) (ACLEntry, error) {
 		return ACLEntry{}, ErrNotFound
 	}
 	in.ID = id
+	in.Managed = true
 	acl.Entries[idx] = in
 	if err := s.be.SaveACL(acl); err != nil {
 		return ACLEntry{}, err
@@ -626,6 +637,7 @@ func (s *Service) ToggleACLEntry(id string) (ACLEntry, error) {
 		return ACLEntry{}, ErrNotFound
 	}
 	acl.Entries[idx].Enabled = !acl.Entries[idx].Enabled
+	acl.Entries[idx].Managed = true
 	if err := s.be.SaveACL(acl); err != nil {
 		return ACLEntry{}, err
 	}
@@ -664,6 +676,7 @@ func (s *Service) CreateRoute(in Route) (Route, error) {
 		return Route{}, err
 	}
 	in.ID = s.idFn("route")
+	in.Managed = true
 	list = append(list, in)
 	if err := s.be.SaveRoutes(list); err != nil {
 		return Route{}, err
@@ -688,6 +701,7 @@ func (s *Service) UpdateRoute(id string, in Route) (Route, error) {
 		return Route{}, ErrNotFound
 	}
 	in.ID = id
+	in.Managed = true
 	list[idx] = in
 	if err := s.be.SaveRoutes(list); err != nil {
 		return Route{}, err
@@ -715,6 +729,7 @@ func (s *Service) SetRouteEnabled(id string, on bool) error {
 			return nil, ErrNotFound
 		}
 		list[idx].Enabled = on
+		list[idx].Managed = true
 		return list, nil
 	})
 }
@@ -733,6 +748,7 @@ func (s *Service) DuplicateRoute(id string) (Route, error) {
 	}
 	cp := list[idx]
 	cp.ID = s.idFn("route")
+	cp.Managed = true
 	if cp.Remark != "" {
 		cp.Remark += "（副本）"
 	}
@@ -754,6 +770,7 @@ func (s *Service) BatchRoutes(action string, ids []string) error {
 			for i := range list {
 				if set[list[i].ID] {
 					list[i].Enabled = on
+					list[i].Managed = true
 				}
 			}
 			return list, nil
@@ -864,6 +881,18 @@ func (s *Service) ImportJSON(raw []byte) error {
 		st.ACL.Mode = ACLBlacklist
 	}
 
+	for i := range st.DHCPServers {
+		st.DHCPServers[i].Managed = true
+	}
+	for i := range st.Statics {
+		st.Statics[i].Managed = true
+	}
+	for i := range st.Routes {
+		st.Routes[i].Managed = true
+	}
+	for i := range st.ACL.Entries {
+		st.ACL.Entries[i].Managed = true
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.be.SaveDHCPServers(st.DHCPServers); err != nil {

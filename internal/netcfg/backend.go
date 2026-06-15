@@ -58,14 +58,14 @@ func NewBackend(kind, dataDir string, logger *slog.Logger) (Backend, error) {
 	case KindUCI:
 		return newUCIBackend(realRunner{}, sidecar, logger)
 	case KindStore:
-		return newStoreBackend(sidecar, logger)
+		return newStoreBackend(sidecar, logger, true)
 	default: // "auto"
 		if uciAvailable() {
 			logger.Info("netcfg backend: detected OpenWrt UCI")
 			return newUCIBackend(realRunner{}, sidecar, logger)
 		}
 		logger.Info("netcfg backend: no UCI detected, using store (JSON + simulated leases)")
-		return newStoreBackend(sidecar, logger)
+		return newStoreBackend(sidecar, logger, true)
 	}
 }
 

@@ -44,6 +44,16 @@ type Backend interface {
 
 	// Live kernel routing table for family "ipv4" | "ipv6" (read-only).
 	RouteTable(family string) ([]RouteEntry, error)
+
+	// Physical NIC inventory (网卡列表, read-only).
+	NICs() ([]NIC, error)
+	// Configured LAN/WAN interfaces (内外网设置).
+	NetIfaces() ([]NetIface, error)
+	SaveNetIface(NetIface) error
+	DeleteNetIface(id string) error
+	// WANAction runs a runtime action on an interface: "connect" (ifup),
+	// "disconnect" (ifdown) or "restart".
+	WANAction(id, action string) error
 }
 
 // NewBackend selects and constructs the network-config backend. kind is one of

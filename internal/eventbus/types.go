@@ -19,11 +19,12 @@ const (
 
 	// Network-config change events (KWRT DHCP / static-routing manager). The
 	// payload is NetChangeData; the frontend refreshes the affected list.
-	TypeDHCPChanged  EventType = "dhcp.changed"
+	TypeDHCPChanged   EventType = "dhcp.changed"
 	TypeStaticChanged EventType = "static.changed"
-	TypeLeaseChanged EventType = "lease.changed"
-	TypeACLChanged   EventType = "acl.changed"
-	TypeRouteChanged EventType = "route.changed"
+	TypeLeaseChanged  EventType = "lease.changed"
+	TypeACLChanged    EventType = "acl.changed"
+	TypeRouteChanged  EventType = "route.changed"
+	TypeIfaceChanged  EventType = "iface.changed"
 )
 
 // NetChangeData is the payload for the network-config change events. Action is

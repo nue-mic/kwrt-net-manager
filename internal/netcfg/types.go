@@ -152,6 +152,9 @@ type State struct {
 	ARPBind     bool          `json:"arp_bind"`
 	ACL         ACL           `json:"acl"`
 	Routes      []Route       `json:"routes"`
+	// NetIfaces holds LAN/WAN configs for the store (dev) backend; the uci
+	// backend reads/writes /etc/config/network directly and ignores this field.
+	NetIfaces []NetIface `json:"net_ifaces,omitempty"`
 }
 
 // CloneState returns a deep copy of s (slices are freshly allocated).
@@ -165,5 +168,9 @@ func CloneState(s State) State {
 	out.Statics = append([]StaticLease(nil), s.Statics...)
 	out.Routes = append([]Route(nil), s.Routes...)
 	out.ACL = ACL{Mode: s.ACL.Mode, Entries: append([]ACLEntry(nil), s.ACL.Entries...)}
+	out.NetIfaces = append([]NetIface(nil), s.NetIfaces...)
+	for i := range out.NetIfaces {
+		out.NetIfaces[i].Ports = append([]string(nil), s.NetIfaces[i].Ports...)
+	}
 	return out
 }

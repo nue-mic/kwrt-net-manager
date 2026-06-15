@@ -80,6 +80,16 @@ func registerNetcfgRoutes(r chi.Router, d Deps) {
 
 	// Live kernel routing table.
 	r.Get("/api/v1/route-table", h.RouteTable)
+
+	// 网卡列表 + 内外网设置（LAN/WAN 接口 + 物理网卡）。
+	r.Get("/api/v1/nics", h.ListNICs)
+	r.Get("/api/v1/netcfg/overview", h.NetOverview)
+	r.Get("/api/v1/ifaces", h.ListNetIfaces)
+	r.Post("/api/v1/ifaces", h.CreateNetIface)
+	r.Get("/api/v1/ifaces/{id}", h.GetNetIface)
+	r.Put("/api/v1/ifaces/{id}", h.UpdateNetIface)
+	r.Delete("/api/v1/ifaces/{id}", h.DeleteNetIface)
+	r.Post("/api/v1/ifaces/{id}/action", h.IfaceAction)
 }
 
 // writeNetErr maps netcfg errors to HTTP responses: ErrNotFound → 404, any

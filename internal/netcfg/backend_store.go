@@ -305,6 +305,19 @@ func seedState() State {
 			Netmask: "255.255.255.0", Prefix: 24, Gateway: "192.168.1.2", Metric: 1,
 			Remark: "示例：到 10.0.0.0/24 的静态路由", Enabled: true,
 		}},
+		NetIfaces: []NetIface{
+			{
+				ID: "lan", Name: "lan1", Role: RoleLAN, Proto: ProtoStatic,
+				Device: "br-lan", Ports: []string{"eth1"},
+				IPAddr: "192.168.1.1", Netmask: "255.255.255.0", MTU: 1500,
+				Remark: "默认内网", Up: true, RuntimeIP: "192.168.1.1",
+			},
+			{
+				ID: "wan", Name: "wan1", Role: RoleWAN, Proto: ProtoDHCP,
+				Device: "eth0", MTU: 1500, DefaultGW: true,
+				Remark: "默认外网（DHCP）", Up: true, RuntimeIP: "192.168.0.10",
+			},
+		},
 	}
 }
 

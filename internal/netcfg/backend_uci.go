@@ -101,8 +101,9 @@ func initdExists(name string) bool {
 }
 
 // dhcpService returns the init.d name of the DHCP server in use, or "" if none
-// is installed (e.g. a minimal box without dnsmasq).
-func dhcpService() string {
+// is installed (e.g. a minimal box without dnsmasq). It is a var so tests can
+// stub the host's installed daemon.
+var dhcpService = func() string {
 	if initdExists("dnsmasq") {
 		return "dnsmasq"
 	}
@@ -149,6 +150,7 @@ func (b *uciBackend) apply() error {
 	existNet := b.managedNames("network")
 
 	keepDhcp := map[string]bool{}
+	anyDHCPEnabled := false
 	var d strings.Builder
 	for _, s := range servers {
 		if !s.Managed {
@@ -165,6 +167,11 @@ func (b *uciBackend) apply() error {
 		fmt.Fprintf(&d, "set dhcp.%s.leasetime='%dm'\n", id, s.LeaseMinutes)
 		if s.Enabled {
 			fmt.Fprintf(&d, "delete dhcp.%s.ignore\n", id)
+			// Make the pool actually serve DHCPv4: dhcpv4='server' is required by
+			// odhcpd and harmless/standard for dnsmasq. This is what turns a
+			// web "启用" into a real DHCP server across both backends.
+			fmt.Fprintf(&d, "set dhcp.%s.dhcpv4='server'\n", id)
+			anyDHCPEnabled = true
 		} else {
 			fmt.Fprintf(&d, "set dhcp.%s.ignore='1'\n", id)
 		}
@@ -213,6 +220,14 @@ func (b *uciBackend) apply() error {
 	for n := range existDhcp {
 		if !keepDhcp[n] {
 			fmt.Fprintf(&d, "delete dhcp.%s\n", n)
+		}
+	}
+	// Multi-backend "force enable": on an odhcpd-only box (no dnsmasq), a pool
+	// only serves once odhcpd is the main DHCPv4 server. Flip it on automatically
+	// when a pool is enabled, but only ever touch an existing odhcpd section.
+	if anyDHCPEnabled && dhcpService() == "odhcpd" {
+		if _, err := b.uciGet("dhcp.odhcpd"); err == nil {
+			d.WriteString("set dhcp.odhcpd.maindhcp='1'\n")
 		}
 	}
 	d.WriteString("commit dhcp\n")

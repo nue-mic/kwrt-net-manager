@@ -181,6 +181,35 @@ func TestUCINoSeedingOnFreshUCI(t *testing.T) {
 	}
 }
 
+func TestUCIForceEnableOnOdhcpd(t *testing.T) {
+	old := dhcpService
+	dhcpService = func() string { return "odhcpd" }
+	defer func() { dhcpService = old }()
+	f := &fakeRunner{
+		show: map[string]string{"dhcp": "", "network": ""},
+		get:  map[string]string{"dhcp.odhcpd": "odhcpd", "network.lan.ipaddr": "192.168.1.1"},
+	}
+	be := newTestUCI(t, f)
+	svc := NewService(be, nil, nil)
+	svc.idFn = func(p string) string { return p + "_e" }
+	if _, err := svc.CreateDHCPServer(DHCPServer{
+		Interface: "lan", Enabled: true, IPStart: "192.168.1.100", IPEnd: "192.168.1.200",
+		Netmask: "255.255.255.0", Gateway: "192.168.1.1", LeaseMinutes: 120,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	dhcp := f.batchContaining("commit dhcp")
+	for _, w := range []string{
+		"delete dhcp.dhcp_e.ignore",
+		"set dhcp.dhcp_e.dhcpv4='server'",
+		"set dhcp.odhcpd.maindhcp='1'", // odhcpd flipped into main DHCP on enable
+	} {
+		if !strings.Contains(dhcp, w) {
+			t.Errorf("force-enable batch missing %q\n--- batch ---\n%s", w, dhcp)
+		}
+	}
+}
+
 func TestLeasetimeToMin(t *testing.T) {
 	cases := map[string]int{"12h": 720, "120m": 120, "1d": 1440, "infinite": 0, "": 0, "30s": 1, "3600": 60}
 	for in, want := range cases {

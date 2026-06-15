@@ -258,3 +258,101 @@ export async function getRouteTable(family: 'ipv4' | 'ipv6'): Promise<RouteEntry
   const { data } = await client.get('/api/v1/route-table', { params: { family } });
   return data.items ?? [];
 }
+
+// ===================== 内外网设置 / 网卡 =====================
+
+export interface NIC {
+  name: string;
+  mac: string;
+  up: boolean;       // 链路(carrier)
+  running: boolean;  // operstate up
+  speed_mb: number;
+  duplex: string;
+  mtu: number;
+  kind: 'physical' | 'bridge' | 'vlan' | 'wifi' | 'virtual';
+  bound: string;     // 绑定到的接口(lan/wan)或空
+  role: '' | 'lan' | 'wan';
+  rx_bytes: number;
+  tx_bytes: number;
+}
+
+export interface NetIface {
+  id: string;
+  name: string;
+  role: 'lan' | 'wan';
+  proto: 'static' | 'dhcp' | 'pppoe';
+  device: string;
+  ports: string[];
+  ipaddr: string;
+  netmask: string;
+  gateway: string;
+  dns_primary: string;
+  dns_secondary: string;
+  username: string;
+  password: string;
+  service: string;
+  ac: string;
+  mtu: number;
+  default_gw: boolean;
+  clone_mac: string;
+  remark: string;
+  up: boolean;        // 只读运行态
+  runtime_ip: string; // 只读运行 IP
+}
+export type NetIfaceInput = Omit<NetIface, 'up' | 'runtime_ip'>;
+
+export interface NetOverview {
+  wan_count: number;
+  wan_up: number;
+  connections: number;
+  lan_count: number;
+  lan_up: number;
+  dhcp_on: number;
+  terminals: number;
+  free_ports: number;
+  wans: NetIface[];
+  lans: NetIface[];
+}
+
+export interface DHCPSvcInfo {
+  daemon: string; // dnsmasq | odhcpd | ""
+  dnsmasq_installed: boolean;
+  odhcpd_installed: boolean;
+  can_install: boolean;
+  pkg_manager: string;
+}
+
+export async function listNICs(): Promise<NIC[]> {
+  const { data } = await client.get('/api/v1/nics');
+  return data.items ?? [];
+}
+export async function getNetOverview(): Promise<NetOverview> {
+  const { data } = await client.get('/api/v1/netcfg/overview');
+  return data;
+}
+export async function listNetIfaces(): Promise<NetIface[]> {
+  const { data } = await client.get('/api/v1/ifaces');
+  return data.items ?? [];
+}
+export async function createNetIface(body: NetIfaceInput): Promise<NetIface> {
+  const { data } = await client.post('/api/v1/ifaces', body);
+  return data;
+}
+export async function updateNetIface(id: string, body: NetIfaceInput): Promise<NetIface> {
+  const { data } = await client.put(`/api/v1/ifaces/${id}`, body);
+  return data;
+}
+export async function deleteNetIface(id: string): Promise<void> {
+  await client.delete(`/api/v1/ifaces/${id}`);
+}
+export async function ifaceAction(id: string, action: 'connect' | 'disconnect' | 'restart'): Promise<void> {
+  await client.post(`/api/v1/ifaces/${id}/action`, { action });
+}
+export async function getDHCPService(): Promise<DHCPSvcInfo> {
+  const { data } = await client.get('/api/v1/dhcp/service');
+  return data;
+}
+export async function installDHCP(): Promise<{ ok: boolean; output: string }> {
+  const { data } = await client.post('/api/v1/dhcp/install', {}, { timeout: 180000 });
+  return data;
+}

@@ -69,10 +69,9 @@ func validateStatic(s *StaticLease) error {
 	if !netutil.IsIPv4(s.IP) {
 		return errors.New("绑定 IP 不是合法的 IPv4 地址")
 	}
+	// 绑定接口对 dnsmasq host 而言是全局保留，不写入接口字段；此处仅作分组/展示，
+	// 允许留空（与导入的既有 host 一致），不强制。
 	s.Interface = strings.TrimSpace(s.Interface)
-	if s.Interface == "" {
-		return errors.New("绑定接口不能为空")
-	}
 	if s.Gateway != "" && !netutil.IsIPv4(s.Gateway) {
 		return errors.New("网关不是合法的 IPv4 地址")
 	}

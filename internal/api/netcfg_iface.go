@@ -84,6 +84,26 @@ func (h *NetcfgHandler) DeleteNetIface(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, map[string]any{"deleted": pathID(r)})
 }
 
+// DHCPService GET /api/v1/dhcp/service — which DHCP daemon is installed/running.
+func (h *NetcfgHandler) DHCPService(w http.ResponseWriter, r *http.Request) {
+	info, err := h.svc.DHCPServiceInfo()
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, CodeInternal, err.Error(), nil)
+		return
+	}
+	WriteJSON(w, http.StatusOK, info)
+}
+
+// InstallDHCP POST /api/v1/dhcp/install — 一键安装 dnsmasq.
+func (h *NetcfgHandler) InstallDHCP(w http.ResponseWriter, r *http.Request) {
+	out, err := h.svc.InstallDHCP()
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, CodeInternal, err.Error(), map[string]any{"output": out})
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]any{"ok": true, "output": out})
+}
+
 // IfaceAction POST /api/v1/ifaces/{id}/action {action: connect|disconnect|restart}
 func (h *NetcfgHandler) IfaceAction(w http.ResponseWriter, r *http.Request) {
 	var body struct {

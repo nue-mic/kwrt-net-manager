@@ -72,6 +72,16 @@ const (
 	ProtoPPPoE  = "pppoe"
 )
 
+// DHCPSvcInfo describes which DHCP daemon is installed/running, powering the
+// 一键安装 dnsmasq flow when a box ships without dnsmasq (the preferred backend).
+type DHCPSvcInfo struct {
+	Daemon           string `json:"daemon"`            // dnsmasq | odhcpd | "" (none)
+	DnsmasqInstalled bool   `json:"dnsmasq_installed"` // /etc/init.d/dnsmasq present
+	OdhcpdInstalled  bool   `json:"odhcpd_installed"`
+	CanInstall       bool   `json:"can_install"` // a package manager is available
+	PkgManager       string `json:"pkg_manager"` // opkg | apk | ""
+}
+
 // NetOverview is the 内外网设置 dashboard summary.
 type NetOverview struct {
 	WANCount    int        `json:"wan_count"`

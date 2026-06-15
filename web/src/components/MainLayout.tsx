@@ -11,6 +11,7 @@ import {
   InfoCircleOutlined,
   PoweroffOutlined,
   WifiOutlined,
+  GlobalOutlined,
   ArrowUpOutlined,
   ArrowDownOutlined,
 } from '@ant-design/icons';
@@ -121,6 +122,15 @@ const MainLayout: React.FC = () => {
         label: '网络设置',
         children: [
           {
+            key: 'net',
+            icon: <GlobalOutlined />,
+            label: '内外网设置',
+            children: [
+              { key: '/net', label: '内外网设置' },
+              { key: '/nics', label: '网卡列表' },
+            ],
+          },
+          {
             key: 'dhcp',
             icon: <ApartmentOutlined />,
             label: 'DHCP 设置',
@@ -160,6 +170,7 @@ const MainLayout: React.FC = () => {
 
   const selectedKey = useMemo(() => location.pathname, [location.pathname]);
   const openKeys = useMemo(() => {
+    if (location.pathname === '/net' || location.pathname === '/nics') return ['net'];
     if (location.pathname.startsWith('/dhcp')) return ['dhcp'];
     if (location.pathname === '/routes' || location.pathname === '/route-table') return ['routes'];
     return [];

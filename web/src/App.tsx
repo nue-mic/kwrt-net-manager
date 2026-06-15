@@ -5,6 +5,8 @@ import MainLayout from './components/MainLayout';
 import Login from './pages/Login';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+const NetOverview = lazy(() => import('./pages/NetOverview'));
+const NICs = lazy(() => import('./pages/NICs'));
 const DhcpServers = lazy(() => import('./pages/DhcpServers'));
 const DhcpStatics = lazy(() => import('./pages/DhcpStatics'));
 const DhcpLeases = lazy(() => import('./pages/DhcpLeases'));
@@ -32,6 +34,9 @@ function App() {
           <Route path="/" element={<MainLayout />}>
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
+
+            <Route path="net" element={<NetOverview />} />
+            <Route path="nics" element={<NICs />} />
 
             <Route path="dhcp">
               <Route index element={<Navigate to="/dhcp/servers" replace />} />

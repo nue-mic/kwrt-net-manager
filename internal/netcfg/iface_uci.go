@@ -2,6 +2,7 @@ package netcfg
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -106,6 +107,11 @@ func (b *uciBackend) deviceToIface() map[string]ifaceRef {
 		if s.typ != "interface" || s.name == "loopback" {
 			continue
 		}
+		// Skip IPv6-companion / unconfigured interfaces so the binding label
+		// reflects the real IPv4 LAN/WAN, not its dhcpv6 sibling on the same NIC.
+		if skipIfaceProto(first(s.opts["proto"])) {
+			continue
+		}
 		role := ifaceRole(s)
 		dev := first(s.opts["device"])
 		if dev == "" {
@@ -120,6 +126,18 @@ func (b *uciBackend) deviceToIface() map[string]ifaceRef {
 		}
 	}
 	return out
+}
+
+// skipIfaceProto reports whether an interface proto should be hidden from
+// 内外网设置 (the IPv4 LAN/WAN view). IPv6-companion transports and raw/empty
+// interfaces are kept out — iKuai surfaces IPv6 in a separate menu, and a
+// dhcpv6 sibling must not show up as its own network port.
+func skipIfaceProto(p string) bool {
+	switch p {
+	case "none", "dhcpv6", "6in4", "6to4", "6rd", "slaac", "grev6", "grev6tap":
+		return true
+	}
+	return false
 }
 
 // ifaceRole classifies an interface as LAN or WAN. Name is the most reliable
@@ -161,9 +179,10 @@ func (b *uciBackend) NetIfaces() ([]NetIface, error) {
 		if s.typ != "interface" || s.name == "loopback" {
 			continue
 		}
-		// Skip unconfigured / non-IP interfaces (proto 'none', e.g. docker veth,
-		// raw bridges). iKuai's 内外网设置 only lists real LAN/WAN networks.
-		if p := first(s.opts["proto"]); p == "none" {
+		// Skip unconfigured / IPv6-companion interfaces (proto 'none' for docker
+		// veth/raw bridges, 'dhcpv6'/'slaac'/… for the IPv6 sibling of a LAN).
+		// iKuai's 内外网设置 only lists real IPv4 LAN/WAN networks.
+		if skipIfaceProto(first(s.opts["proto"])) {
 			continue
 		}
 		ni := NetIface{
@@ -254,20 +273,38 @@ func (b *uciBackend) SaveNetIface(in NetIface) error {
 
 	if in.Role == RoleLAN {
 		in.Proto = ProtoStatic
-		// LAN uses a bridge device when it has >1 port (or keep its device).
-		dev := in.Device
-		if dev == "" {
-			dev = "br-" + id
-		}
 		fmt.Fprintf(&sb, "set network.%s.proto='static'\n", id)
-		fmt.Fprintf(&sb, "set network.%s.device='%s'\n", id, dev)
+		// Device/bridge selection by port count:
+		//   ≥2 ports → a real bridge (DSA `config device type bridge`, 21.02+);
+		//   1 port  → bind that NIC directly (no bridge — works on every version
+		//             and avoids creating a bridge named after the NIC itself,
+		//             which would collide with the physical device);
+		//   0 ports → keep the existing device, leave topology untouched.
+		ports := dedupePorts(in.Ports)
+		switch {
+		case len(ports) >= 2:
+			dev := in.Device
+			if dev == "" || !b.isBridgeDevice(dev) {
+				dev = "br-" + id
+			}
+			fmt.Fprintf(&sb, "set network.%s.device='%s'\n", id, dev)
+			b.writeBridge(&sb, dev, ports)
+		case len(ports) == 1:
+			fmt.Fprintf(&sb, "set network.%s.device='%s'\n", id, ports[0])
+			b.detachPorts(&sb, "", ports) // 独占该物理口：从其它网桥摘除
+		default:
+			dev := in.Device
+			if dev == "" {
+				dev = "br-" + id
+			}
+			fmt.Fprintf(&sb, "set network.%s.device='%s'\n", id, dev)
+		}
 		if in.IPAddr != "" {
 			fmt.Fprintf(&sb, "set network.%s.ipaddr='%s'\n", id, in.IPAddr)
 		}
 		if in.Netmask != "" {
 			fmt.Fprintf(&sb, "set network.%s.netmask='%s'\n", id, in.Netmask)
 		}
-		b.writeBridge(&sb, dev, in.Ports)
 	} else {
 		// WAN
 		switch in.Proto {
@@ -301,6 +338,7 @@ func (b *uciBackend) SaveNetIface(in NetIface) error {
 		}
 		if dev != "" {
 			fmt.Fprintf(&sb, "set network.%s.device='%s'\n", id, dev)
+			b.detachPorts(&sb, "", []string{dev}) // WAN takes the NIC exclusively
 		}
 		if in.DefaultGW {
 			fmt.Fprintf(&sb, "delete network.%s.defaultroute\n", id) // default is on
@@ -340,6 +378,72 @@ func (b *uciBackend) writeBridge(sb *strings.Builder, dev string, ports []string
 			fmt.Fprintf(sb, "add_list network.%s.ports='%s'\n", sec, p)
 		}
 	}
+	// Exclusivity: a NIC can only belong to one bridge — detach these ports from
+	// every other bridge so re-binding a card actually moves it.
+	b.detachPorts(sb, sec, ports)
+}
+
+// detachPorts removes the given ports from every bridge `config device` section
+// except keepSection, so binding a NIC to one LAN/WAN unbinds it elsewhere.
+func (b *uciBackend) detachPorts(sb *strings.Builder, keepSection string, ports []string) {
+	if len(ports) == 0 {
+		return
+	}
+	want := map[string]bool{}
+	for _, p := range ports {
+		want[p] = true
+	}
+	show, err := b.uciShow("network")
+	if err != nil {
+		return
+	}
+	for _, s := range parseUci(show, "network") {
+		if s.typ != "device" || s.name == keepSection || first(s.opts["type"]) != "bridge" {
+			continue
+		}
+		for _, e := range s.opts["ports"] {
+			if want[e] {
+				fmt.Fprintf(sb, "del_list network.%s.ports='%s'\n", s.name, e)
+			}
+		}
+	}
+}
+
+// dedupePorts trims, drops empties, and removes duplicates while preserving
+// order — so a port list from the UI maps cleanly to bridge members.
+func dedupePorts(in []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, p := range in {
+		p = strings.TrimSpace(p)
+		if p == "" || seen[p] {
+			continue
+		}
+		seen[p] = true
+		out = append(out, p)
+	}
+	return out
+}
+
+// isBridgeDevice reports whether dev names a bridge: either the conventional
+// br-* device, or an existing `config device type 'bridge'` with that name.
+func (b *uciBackend) isBridgeDevice(dev string) bool {
+	if dev == "" {
+		return false
+	}
+	if strings.HasPrefix(dev, "br-") {
+		return true
+	}
+	show, err := b.uciShow("network")
+	if err != nil {
+		return false
+	}
+	for _, s := range parseUci(show, "network") {
+		if s.typ == "device" && first(s.opts["name"]) == dev && first(s.opts["type"]) == "bridge" {
+			return true
+		}
+	}
+	return false
 }
 
 // deviceSectionByName returns the section name of the `config device` whose
@@ -424,4 +528,66 @@ func delOpt(sb *strings.Builder, id string, opts ...string) {
 	for _, o := range opts {
 		fmt.Fprintf(sb, "delete network.%s.%s\n", id, o)
 	}
+}
+
+// ---- DHCP service info + 一键安装 dnsmasq ----
+
+func (b *uciBackend) pkgManager() string {
+	if out, _ := b.run.Run("", "sh", "-c", "command -v opkg"); strings.TrimSpace(out) != "" {
+		return "opkg"
+	}
+	if out, _ := b.run.Run("", "sh", "-c", "command -v apk"); strings.TrimSpace(out) != "" {
+		return "apk"
+	}
+	return ""
+}
+
+func (b *uciBackend) DHCPServiceInfo() (DHCPSvcInfo, error) {
+	info := DHCPSvcInfo{
+		DnsmasqInstalled: initdExists("dnsmasq"),
+		OdhcpdInstalled:  initdExists("odhcpd"),
+		Daemon:           dhcpService(),
+		PkgManager:       b.pkgManager(),
+	}
+	info.CanInstall = info.PkgManager != "" && !info.DnsmasqInstalled
+	return info, nil
+}
+
+func (b *uciBackend) InstallDHCP() (string, error) {
+	pm := b.pkgManager()
+	if pm == "" {
+		return "", errors.New("未找到包管理器（opkg / apk），无法自动安装 dnsmasq")
+	}
+	var log strings.Builder
+	switch pm {
+	case "apk":
+		o1, _ := b.run.Run("", "apk", "update")
+		log.WriteString(tail(o1, 600) + "\n")
+		o2, err := b.run.Run("", "apk", "add", "dnsmasq")
+		log.WriteString(tail(o2, 1600))
+		if err != nil {
+			return log.String(), fmt.Errorf("apk add dnsmasq 失败：%v", err)
+		}
+	default: // opkg
+		o1, _ := b.run.Run("", "opkg", "update")
+		log.WriteString(tail(o1, 600) + "\n")
+		o2, err := b.run.Run("", "opkg", "install", "dnsmasq")
+		log.WriteString(tail(o2, 1600))
+		if err != nil {
+			return log.String(), fmt.Errorf("opkg install dnsmasq 失败：%v", err)
+		}
+	}
+	// Enable + start so it serves immediately.
+	_, _ = b.run.Run("", "/etc/init.d/dnsmasq", "enable")
+	_, _ = b.run.Run("", "/etc/init.d/dnsmasq", "start")
+	return log.String(), nil
+}
+
+// tail returns the last n bytes of s (so opkg's verbose output stays bounded).
+func tail(s string, n int) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= n {
+		return s
+	}
+	return "…" + s[len(s)-n:]
 }

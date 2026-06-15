@@ -44,6 +44,8 @@ func registerNetcfgRoutes(r chi.Router, d Deps) {
 	r.Delete("/api/v1/dhcp/servers/{id}", h.DeleteServer)
 	r.Post("/api/v1/dhcp/servers/{id}/toggle", h.ToggleServer)
 	r.Post("/api/v1/dhcp/restart", h.RestartDHCP)
+	r.Get("/api/v1/dhcp/service", h.DHCPService)
+	r.Post("/api/v1/dhcp/install", h.InstallDHCP)
 
 	// Static reservations.
 	r.Get("/api/v1/dhcp/statics", h.ListStatics)

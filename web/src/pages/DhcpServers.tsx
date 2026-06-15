@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   App,
   Button,
   Drawer,
   Form,
   Input,
   InputNumber,
+  Modal,
   Popconfirm,
   Select,
   Space,
@@ -15,7 +17,7 @@ import {
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { PlusOutlined } from '@ant-design/icons';
+import { PlusOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import PageCard from '../components/PageCard';
 import { useNetData, extractErr } from '../hooks/useNetData';
 import * as net from '../api/netcfg';
@@ -49,6 +51,8 @@ export default function DhcpServersPage() {
   const { data, loading, reload } = useNetData<net.DHCPServer[]>(() => net.listServers(), []);
 
   const [status, setStatus] = useState<net.NetStatus | null>(null);
+  const [svc, setSvc] = useState<net.DHCPSvcInfo | null>(null);
+  const [installing, setInstalling] = useState(false);
   const [interfaces, setInterfaces] = useState<net.NetInterface[]>([]);
   const [keyword, setKeyword] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
@@ -69,6 +73,12 @@ export default function DhcpServersPage() {
         setInterfaces(ifs);
       } catch (e) {
         if (alive) message.error(extractErr(e));
+      }
+      try {
+        const info = await net.getDHCPService();
+        if (alive) setSvc(info);
+      } catch {
+        /* 服务信息可选，失败静默 */
       }
     })();
     return () => {
@@ -209,6 +219,28 @@ export default function DhcpServersPage() {
     }
   };
 
+  const onInstallDnsmasq = async () => {
+    setInstalling(true);
+    try {
+      const r = await net.installDHCP();
+      Modal.success({
+        title: 'dnsmasq 安装完成',
+        width: 640,
+        content: <pre style={{ maxHeight: 320, overflow: 'auto', fontSize: 12 }}>{r.output || '已安装'}</pre>,
+      });
+      try {
+        setSvc(await net.getDHCPService());
+      } catch {
+        /* ignore */
+      }
+      reload();
+    } catch (e) {
+      message.error('安装失败：' + extractErr(e));
+    } finally {
+      setInstalling(false);
+    }
+  };
+
   const columns: ColumnsType<net.DHCPServer> = [
     { title: '服务接口', dataIndex: 'interface', width: 120 },
     {
@@ -313,6 +345,20 @@ export default function DhcpServersPage() {
         </>
       }
     >
+      {svc && !svc.dnsmasq_installed && svc.can_install && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message="未安装 dnsmasq（OpenWrt 标准 DHCP + DNS 服务）"
+          description={`当前 DHCP 守护：${svc.daemon || '无'}。建议安装 dnsmasq 后由本面板统一下发 DHCP / DNS 配置。`}
+          action={
+            <Button type="primary" size="small" loading={installing} icon={<ThunderboltOutlined />} onClick={onInstallDnsmasq}>
+              一键安装 dnsmasq
+            </Button>
+          }
+        />
+      )}
       <Table
         rowKey="id"
         size="small"

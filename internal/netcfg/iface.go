@@ -109,6 +109,20 @@ func (s *Service) nextIfaceID(role string) string {
 	return role + "_new"
 }
 
+// ================= DHCP service (一键安装 dnsmasq) =================
+
+// DHCPServiceInfo reports the installed/running DHCP daemon.
+func (s *Service) DHCPServiceInfo() (DHCPSvcInfo, error) { return s.be.DHCPServiceInfo() }
+
+// InstallDHCP installs dnsmasq via the system package manager.
+func (s *Service) InstallDHCP() (string, error) {
+	out, err := s.be.InstallDHCP()
+	if err == nil {
+		s.publish(eventbus.TypeDHCPChanged, "install", 0)
+	}
+	return out, err
+}
+
 // ================= overview (内外网设置总览) =================
 
 // NetOverview builds the LAN/WAN dashboard summary.

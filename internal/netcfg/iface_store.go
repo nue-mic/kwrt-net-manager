@@ -60,3 +60,12 @@ func (b *storeBackend) WANAction(id, action string) error {
 	}
 	return nil
 }
+
+func (b *storeBackend) DHCPServiceInfo() (DHCPSvcInfo, error) {
+	// Dev box: pretend dnsmasq is present so the install banner stays hidden.
+	return DHCPSvcInfo{Daemon: "dnsmasq", DnsmasqInstalled: true, CanInstall: false}, nil
+}
+
+func (b *storeBackend) InstallDHCP() (string, error) {
+	return "store 后端（开发/模拟）无需安装 dnsmasq", nil
+}

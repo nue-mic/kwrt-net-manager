@@ -54,6 +54,12 @@ type Backend interface {
 	// WANAction runs a runtime action on an interface: "connect" (ifup),
 	// "disconnect" (ifdown) or "restart".
 	WANAction(id, action string) error
+
+	// DHCPServiceInfo reports which DHCP daemon is installed/running.
+	DHCPServiceInfo() (DHCPSvcInfo, error)
+	// InstallDHCP installs dnsmasq (一键安装) via the system package manager,
+	// returning the combined command output.
+	InstallDHCP() (string, error)
 }
 
 // NewBackend selects and constructs the network-config backend. kind is one of

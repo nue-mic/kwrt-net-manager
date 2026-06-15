@@ -1,0 +1,50 @@
+
+services:
+  kwrtmgrd:
+    image: ghcr.io/mia-clark/kwrt-net-manager:${KWRTNET_IMAGE_TAG:-latest}
+    container_name: docker_kwrtmgrd
+    restart: always
+    network_mode: host
+    environment:
+      # --- required ---
+      KWRTNET_API_TOKEN: ${KWRTNET_API_TOKEN:-admin@local}
+
+      # --- optional ---
+      KWRTNET_HTTP_ADDR: ":${KWRTNET_HTTP_PORT:-17200}"
+      KWRTNET_CORS_ORIGINS: ${KWRTNET_CORS_ORIGINS:-*}
+      KWRTNET_LOG_LEVEL: ${KWRTNET_LOG_LEVEL:-info}
+      KWRTNET_DOCS_ENABLED: ${KWRTNET_DOCS_ENABLED:-true}
+      TZ: ${TZ:-UTC}
+
+    volumes:
+      - ./frpmgr-data:/data
+      # - ${KWRTNET_DATA_DIR:-./data}:/data
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+    # ------------------------------------------------------------------
+    # Resource hints. Comment out if you don't use compose v2 deploy
+    # constraints. Defaults are generous; the daemon idles at ~30 MB.
+    # ------------------------------------------------------------------
+    deploy:
+      resources:
+        limits:
+          memory: ${KWRTNET_MEMORY_LIMIT:-512M}
+        reservations:
+          memory: 64M
+
+    # ------------------------------------------------------------------
+    # Optional: opt-in to Watchtower for unattended image updates.
+    # https://containrrr.dev/watchtower/
+    # ------------------------------------------------------------------
+    labels:
+      com.centurylinklabs.watchtower.enable: "${KWRTNET_AUTOUPDATE:-false}"
+
+
+# networks:
+#   frpmgr:
+#     driver: bridge

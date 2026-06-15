@@ -1,0 +1,40 @@
+config kwrtmgrd 'main'
+	# 服务的持久运行状态 (1=应运行/开机自起，0=应停止)。
+	# 这也是网页「启动/停止」按钮写入的状态：点停止→0，点启动→1。
+	# start_service 据此决定是否拉起，故重启/升级后都会保持上次的启停状态。
+	option enabled '1'
+	# 开机强制自启 (1/0)。默认 0=跟随上面的 enabled（停的保持停、开的保持开）。
+	# 设为 1 时：即使在网页点了「停止」，系统重启/升级后仍会强制自动启动。
+	option boot_autostart '0'
+	# 监听地址：可只填端口(如 18080，自动补为 :18080)，或 :端口 / ip:端口；
+	# IPv6 单地址须加方括号，如 [::1]:18080
+	option http_addr ':18080'
+	# API 登录令牌 (后台访问凭证)。留空时首次启动自动生成强随机令牌，
+	# 之后用 `uci get kwrtmgrd.main.token` 查看。
+	option token ''
+	# 数据根目录 (profiles/logs/stores/meta.json)。必须持久化路径，
+	# 切勿用 /var 或 /tmp (OpenWrt 上为 tmpfs，重启丢失)。
+	option data_dir '/usr/lib/kwrtmgrd'
+	# 日志级别: trace|debug|info|warn|error
+	option log_level 'info'
+	# 是否开放 /api/docs 在线文档 (1/0)
+	option docs_enabled '1'
+	# CORS 白名单，逗号分隔或 *
+	option cors_origins '*'
+	# Web 端一键自更新 (1/0)。OpenWrt 上默认 0：自更新会覆盖二进制，
+	# 请改用 kwrtmgrd-fetch 或重装 ipk 升级。
+	option self_update '0'
+
+	# --- 以下供 kwrtmgrd-fetch 拉取二进制时使用（一般无需改）---
+	# 下载优先级：① 自建 gh-raw 源（首选）② 公共代理（兜底）③ GitHub 直连
+	#
+	# 指定要拉取的二进制版本；留空=随包版本(/usr/lib/kwrtmgrd/VERSION)；填 latest=拉最新
+	# option version '1.2.34'
+	# 指定单一公共代理（跳过内置公共代理列表），形如 https://my.mirror/
+	# option download_proxy ''
+	# 设为 1 则跳过自建源 + 公共代理，直连 GitHub
+	option no_proxy '0'
+	# 覆盖内置自建 gh-raw 源域名列表（逗号分隔），一般无需改
+	# option release_proxy_bases 'https://gh-raw.966788.xyz,https://gh-raw.988669.xyz'
+	# 覆盖自建源资源键，一般无需改
+	# option install_proxy_key 'frpc-mgr-releases'

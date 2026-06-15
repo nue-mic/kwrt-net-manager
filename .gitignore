@@ -1,0 +1,20 @@
+bin/
+dist/
+dist-ipk/
+openwrt-dist/
+tmp/
+data/
+*.syso
+*.exe
+*.exe~
+.env
+.idea/
+.vscode/
+web/.vite/
+docs/.local/
+
+# secrets / local agent config (never commit)
+.claude.local/
+.claude/secrets/
+.claude/settings.local.json
+*github-tokens*.env

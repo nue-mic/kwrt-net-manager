@@ -1,0 +1,107 @@
+version: 2
+
+project_name: kwrtmgrd
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: kwrtmgrd
+    main: ./cmd/kwrtmgrd
+    binary: kwrtmgrd
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/mia-clark/kwrt-net-manager/pkg/version.Number={{.Version}}
+      - -X github.com/mia-clark/kwrt-net-manager/pkg/version.BuildDate={{.Date}}
+    # 显式目标清单（对标 frp 官方全平台）。稀疏矩阵用 targets 比 goos×goarch+ignore 清晰。
+    # arm 用 goarm 后缀（v6/v7 两个变体）；mips/mipsle 走 softfloat（软路由多无 FPU），
+    # mips64/mips64le 走 hardfloat；amd64/arm64/386/riscv64 用各自默认微架构（无需后缀）。
+    targets:
+      - linux_amd64
+      - linux_arm64
+      - linux_arm_6
+      - linux_arm_7
+      - linux_386
+      - linux_mips_softfloat
+      - linux_mipsle_softfloat
+      - linux_mips64_hardfloat
+      - linux_mips64le_hardfloat
+      - linux_riscv64
+      - linux_loong64
+      - darwin_amd64
+      - darwin_arm64
+      - windows_amd64
+      - windows_arm64
+      - windows_386
+      - freebsd_amd64
+      - freebsd_arm64
+      # android_arm64 暂不发布：frp 依赖 wlynxg/anet 在 Go 1.25 下 linkname net.zoneCache
+      # 失效（link error），无法构建；termux 等场景可直接使用 linux_arm64 静态二进制。
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}
+    files:
+      - README.md
+      - LICENSE
+      - CHANGELOG.md
+      - docs/README-server.md
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-dev+{{ .ShortCommit }}"
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - "Merge pull request"
+      - "Merge branch"
+  groups:
+    - title: "Features"
+      regexp: '^.*?feat(\(.+\))??:.+$'
+      order: 0
+    - title: "Bug fixes"
+      regexp: '^.*?fix(\(.+\))??:.+$'
+      order: 1
+    - title: "Other"
+      order: 999
+
+release:
+  draft: false
+  prerelease: auto
+  mode: replace
+  github:
+    owner: mia-clark
+    name: kwrt-net-manager
+  # OpenWrt ipk（单个 all 包）随发布一并上传。该 ipk 由 CI 在 goreleaser 之前
+  # 用 openwrt/build-ipk.sh 生成到 openwrt-dist/（见 .github/workflows/release.yml）。
+  extra_files:
+    - glob: ./openwrt-dist/*.ipk
+  header: |
+    ## kwrtmgrd {{ .Tag }}
+
+    Built from [`{{ .ShortCommit }}`](https://github.com/mia-clark/kwrt-net-manager/commit/{{ .FullCommit }}).
+  footer: |
+    ---
+
+    Container image: `ghcr.io/mia-clark/kwrt-net-manager:{{ .Version }}`
+    See [`docs/README-server.md`](https://github.com/mia-clark/kwrt-net-manager/blob/main/docs/README-server.md) for deployment.

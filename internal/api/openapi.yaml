@@ -1,0 +1,666 @@
+openapi: 3.1.0
+info:
+  title: KWRT 网络管理 API
+  description: |
+    KWRT 网络管理守护进程（kwrtmgrd）—— 仿爱快的 DHCP 与静态路由管理。
+    后端通过可插拔后端落地：OpenWrt 上走 UCI/dnsmasq/ip（uci 后端），
+    开发/非 OpenWrt 环境走 JSON 文件 + 模拟租约（store 后端）。
+    所有领域 JSON 均为 snake_case。实时变更经 WebSocket /api/v1/events 推送。
+  version: 2.0.0
+servers:
+  - url: http://localhost:18080
+security:
+  - BearerAuth: []
+tags:
+  - name: system
+  - name: dhcp-server
+  - name: dhcp-static
+  - name: dhcp-lease
+  - name: dhcp-acl
+  - name: route
+  - name: netcfg
+  - name: backup
+
+paths:
+  /api/v1/health:
+    get:
+      tags: [system]
+      summary: 存活探针（无需鉴权）
+      security: []
+      responses:
+        "200": { description: OK }
+
+  /api/v1/version:
+    get:
+      tags: [system]
+      summary: 守护进程版本
+      responses:
+        "200": { description: OK }
+
+  /api/v1/netcfg/status:
+    get:
+      tags: [netcfg]
+      summary: 网络配置服务状态（后端类型 / DHCP 健康 / pending）
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Status" }
+
+  /api/v1/interfaces:
+    get:
+      tags: [netcfg]
+      summary: L3 接口列表（服务接口 / 线路下拉源）
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Interface" }
+
+  /api/v1/dhcp/servers:
+    get:
+      tags: [dhcp-server]
+      summary: DHCP 服务端列表
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/DHCPServer" }
+    post:
+      tags: [dhcp-server]
+      summary: 新增 DHCP 服务端
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DHCPServer" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DHCPServer" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/v1/dhcp/servers/batch:
+    post:
+      tags: [dhcp-server]
+      summary: 批量启用/停用/删除
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BatchReq" }
+      responses:
+        "200": { description: OK }
+
+  /api/v1/dhcp/servers/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [dhcp-server]
+      summary: 取单个 DHCP 服务端
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DHCPServer" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [dhcp-server]
+      summary: 更新 DHCP 服务端
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DHCPServer" }
+      responses:
+        "200": { description: OK }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [dhcp-server]
+      summary: 删除 DHCP 服务端
+      responses:
+        "200": { description: OK }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/dhcp/servers/{id}/toggle:
+    post:
+      tags: [dhcp-server]
+      summary: 启用/停用
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ToggleReq" }
+      responses:
+        "200": { description: OK }
+
+  /api/v1/dhcp/restart:
+    post:
+      tags: [dhcp-server]
+      summary: 重启 DHCP 服务
+      responses:
+        "200": { description: OK }
+
+  /api/v1/dhcp/statics:
+    get:
+      tags: [dhcp-static]
+      summary: DHCP 静态分配列表（含 arp_bind 全局开关）
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/StaticLease" }
+                  arp_bind: { type: boolean }
+    post:
+      tags: [dhcp-static]
+      summary: 新增静态分配
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StaticLease" }
+      responses:
+        "201": { description: Created }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/v1/dhcp/statics/batch:
+    post:
+      tags: [dhcp-static]
+      summary: 批量启用/停用/删除
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BatchReq" }
+      responses:
+        "200": { description: OK }
+
+  /api/v1/dhcp/statics/arp-bind:
+    put:
+      tags: [dhcp-static]
+      summary: 设置“兼容 ARP 绑定到静态分配”全局开关
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ToggleReq" }
+      responses:
+        "200": { description: OK }
+
+  /api/v1/dhcp/statics/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    put:
+      tags: [dhcp-static]
+      summary: 更新静态分配
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StaticLease" }
+      responses:
+        "200": { description: OK }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [dhcp-static]
+      summary: 删除静态分配
+      responses:
+        "200": { description: OK }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/dhcp/statics/{id}/toggle:
+    post:
+      tags: [dhcp-static]
+      summary: 启用/停用
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ToggleReq" }
+      responses:
+        "200": { description: OK }
+
+  /api/v1/dhcp/leases:
+    get:
+      tags: [dhcp-lease]
+      summary: DHCP 终端列表（活动租约，只读）
+      parameters:
+        - { name: interface, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [static, dynamic] } }
+        - { name: q, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Lease" }
+
+  /api/v1/dhcp/leases/reserve:
+    post:
+      tags: [dhcp-lease]
+      summary: 加入静态分配（从租约提升为保留）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ip, mac]
+              properties:
+                ip: { type: string }
+                mac: { type: string }
+                hostname: { type: string }
+                interface: { type: string }
+      responses:
+        "201": { description: Created }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/v1/dhcp/leases/blacklist:
+    post:
+      tags: [dhcp-lease]
+      summary: 加入 MAC 黑名单
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mac]
+              properties:
+                mac: { type: string }
+                remark: { type: string }
+      responses:
+        "201": { description: Created }
+
+  /api/v1/dhcp/leases/fix-subnet:
+    post:
+      tags: [dhcp-lease]
+      summary: 一键固定同网段（批量把动态租约转保留）
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                interface: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { added: { type: integer } }
+
+  /api/v1/dhcp/acl:
+    get:
+      tags: [dhcp-acl]
+      summary: DHCP 黑白名单
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ACL" }
+
+  /api/v1/dhcp/acl/mode:
+    put:
+      tags: [dhcp-acl]
+      summary: 切换黑/白名单模式
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode]
+              properties:
+                mode: { type: string, enum: [blacklist, whitelist] }
+      responses:
+        "200": { description: OK }
+
+  /api/v1/dhcp/acl/entries:
+    post:
+      tags: [dhcp-acl]
+      summary: 新增名单条目
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ACLEntry" }
+      responses:
+        "201": { description: Created }
+
+  /api/v1/dhcp/acl/entries/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    put:
+      tags: [dhcp-acl]
+      summary: 更新名单条目
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ACLEntry" }
+      responses:
+        "200": { description: OK }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [dhcp-acl]
+      summary: 删除名单条目
+      responses:
+        "200": { description: OK }
+
+  /api/v1/dhcp/acl/entries/{id}/toggle:
+    post:
+      tags: [dhcp-acl]
+      summary: 启用/停用名单条目
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: OK }
+
+  /api/v1/routes:
+    get:
+      tags: [route]
+      summary: 静态路由列表
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Route" }
+    post:
+      tags: [route]
+      summary: 新增静态路由
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Route" }
+      responses:
+        "201": { description: Created }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/v1/routes/batch:
+    post:
+      tags: [route]
+      summary: 批量启用/停用/删除
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BatchReq" }
+      responses:
+        "200": { description: OK }
+
+  /api/v1/routes/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [route]
+      summary: 取单条路由
+      responses:
+        "200": { description: OK }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [route]
+      summary: 更新路由
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Route" }
+      responses:
+        "200": { description: OK }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [route]
+      summary: 删除路由
+      responses:
+        "200": { description: OK }
+
+  /api/v1/routes/{id}/toggle:
+    post:
+      tags: [route]
+      summary: 启用/停用
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ToggleReq" }
+      responses:
+        "200": { description: OK }
+
+  /api/v1/routes/{id}/duplicate:
+    post:
+      tags: [route]
+      summary: 复制路由
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "201": { description: Created }
+
+  /api/v1/route-table:
+    get:
+      tags: [route]
+      summary: 当前路由表（实时内核路由，只读）
+      parameters:
+        - { name: family, in: query, schema: { type: string, enum: [ipv4, ipv6] } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  family: { type: string }
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/RouteEntry" }
+
+  /api/v1/export/all:
+    get:
+      tags: [backup]
+      summary: 导出全部（meta + 网络配置 zip）
+      responses:
+        "200": { description: zip 下载 }
+
+  /api/v1/import/zip:
+    post:
+      tags: [backup]
+      summary: 导入备份 zip
+      responses:
+        "200": { description: OK }
+
+  /api/v1/events:
+    get:
+      tags: [system]
+      summary: WebSocket 事件流（dhcp/static/lease/acl/route 变更）
+      responses:
+        "101": { description: Switching Protocols }
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+  responses:
+    BadRequest:
+      description: 参数校验失败
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+    ToggleReq:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
+    BatchReq:
+      type: object
+      required: [action, ids]
+      properties:
+        action: { type: string, enum: [enable, disable, delete] }
+        ids:
+          type: array
+          items: { type: string }
+    Status:
+      type: object
+      properties:
+        backend: { type: string, enum: [uci, store] }
+        dhcp_ok: { type: boolean }
+        pending: { type: boolean }
+        message: { type: string }
+    Interface:
+      type: object
+      properties:
+        name: { type: string }
+        ipv4: { type: string }
+        netmask: { type: string }
+        prefix: { type: integer }
+        up: { type: boolean }
+    CustomOption:
+      type: object
+      properties:
+        code: { type: integer }
+        value: { type: string }
+        type: { type: string }
+    DHCPServer:
+      type: object
+      properties:
+        id: { type: string }
+        interface: { type: string }
+        enabled: { type: boolean }
+        ip_start: { type: string }
+        ip_end: { type: string }
+        netmask: { type: string }
+        gateway: { type: string }
+        dns_primary: { type: string }
+        dns_secondary: { type: string }
+        lease_minutes: { type: integer }
+        exclude:
+          type: array
+          items: { type: string }
+        expired_keep_hours: { type: integer }
+        check_ip: { type: boolean }
+        relay_only: { type: boolean }
+        assoc_interface: { type: string }
+        custom_options:
+          type: array
+          items: { $ref: "#/components/schemas/CustomOption" }
+        remaining: { type: integer, readOnly: true }
+    StaticLease:
+      type: object
+      properties:
+        id: { type: string }
+        hostname: { type: string }
+        ip: { type: string }
+        mac: { type: string }
+        gateway: { type: string }
+        interface: { type: string }
+        dns_primary: { type: string }
+        dns_secondary: { type: string }
+        remark: { type: string }
+        enabled: { type: boolean }
+    Lease:
+      type: object
+      properties:
+        hostname: { type: string }
+        ip: { type: string }
+        mac: { type: string }
+        expiry: { type: integer }
+        remaining_seconds: { type: integer }
+        interface: { type: string }
+        static: { type: boolean }
+        remark: { type: string }
+    ACLEntry:
+      type: object
+      properties:
+        id: { type: string }
+        mac: { type: string }
+        remark: { type: string }
+        enabled: { type: boolean }
+    ACL:
+      type: object
+      properties:
+        mode: { type: string, enum: [blacklist, whitelist] }
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/ACLEntry" }
+    Route:
+      type: object
+      properties:
+        id: { type: string }
+        family: { type: string, enum: [ipv4, ipv6] }
+        interface: { type: string }
+        target: { type: string }
+        netmask: { type: string }
+        prefix: { type: integer }
+        gateway: { type: string }
+        metric: { type: integer }
+        remark: { type: string }
+        enabled: { type: boolean }
+    RouteEntry:
+      type: object
+      properties:
+        interface: { type: string }
+        target: { type: string }
+        netmask: { type: string }
+        gateway: { type: string }
+        metric: { type: integer }

@@ -1,0 +1,14 @@
+{
+	"luci-app-kwrtmgrd": {
+		"description": "Grant access to kwrtmgrd web shell (config / fetch core / service control)",
+		"read": {
+			"uci": [ "kwrtmgrd" ]
+		},
+		"write": {
+			"uci": [ "kwrtmgrd" ],
+			"file": {
+				"/usr/bin/kwrtmgrd": [ "write" ]
+			}
+		}
+	}
+}

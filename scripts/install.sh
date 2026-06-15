@@ -76,6 +76,7 @@ GHRAW_KEY="${KWRTNET_INSTALL_PROXY_KEY:-frpc-mgr-releases}"
 # 这些值会在 detect_platform / 参数解析阶段被填充
 OS=""
 ARCH=""
+IS_OPENWRT=0
 DATA_DIR=""
 ENV_FILE=""
 DOWNLOADER=""
@@ -250,9 +251,15 @@ detect_platform() {
         freebsd) DATA_DIR="/var/db/${SERVICE_NAME}" ;;
         *)       DATA_DIR="/var/lib/${SERVICE_NAME}" ;;
     esac
+    # OpenWrt: /var -> /tmp 是 tmpfs (重启丢数据)，数据目录改用持久路径 (与 ipk 一致)
+    if [ -f /etc/openwrt_release ] || [ -x /sbin/procd ]; then
+        IS_OPENWRT=1
+        [ "$OS" = "linux" ] && DATA_DIR="/usr/lib/${SERVICE_NAME}"
+    fi
     ENV_FILE="/etc/${SERVICE_NAME}/${SERVICE_NAME}.env"
 
     info "检测到平台: ${C_BOLD}${OS}/${ARCH}${C_RST}"
+    [ "$IS_OPENWRT" = "1" ] && info "检测到 OpenWrt: 数据目录用持久路径 ${C_BOLD}${DATA_DIR}${C_RST} (OpenWrt 推荐改用 ipk 安装)"
 }
 
 # ----------------------------------------------------------------------------
@@ -625,6 +632,10 @@ detect_init_system() {
     fi
     if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
         echo "systemd"; return
+    fi
+    # OpenWrt procd: 有 /sbin/procd 与 /etc/rc.common，但无 rc-update，须排在 openrc 之前
+    if [ -x /sbin/procd ] && [ -e /etc/rc.common ]; then
+        echo "procd"; return
     fi
     if command -v rc-update >/dev/null 2>&1; then
         echo "openrc"; return

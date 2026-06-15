@@ -13,11 +13,6 @@ func pathID(r *http.Request) string {
 	return chi.URLParam(r, "id")
 }
 
-// pathName returns the chi URL param "name" or empty string.
-func pathName(r *http.Request) string {
-	return chi.URLParam(r, "name")
-}
-
 // decodeJSON parses the request body into dst. A 400 is written and false
 // returned on failure.
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {

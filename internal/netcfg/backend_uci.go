@@ -141,10 +141,13 @@ func (b *uciBackend) apply() error {
 	b.applyMu.Lock()
 	defer b.applyMu.Unlock()
 
-	servers, _ := b.storeBackend.DHCPServers()
-	statics, _ := b.storeBackend.Statics()
-	acl, _ := b.storeBackend.ACL()
-	routes, _ := b.storeBackend.Routes()
+	// Project the sidecar (store) working state into UCI. These read the
+	// embedded storeBackend's data verbatim — the uciBackend deliberately does
+	// not override them.
+	servers, _ := b.DHCPServers()
+	statics, _ := b.Statics()
+	acl, _ := b.ACL()
+	routes, _ := b.Routes()
 
 	existDhcp := b.managedNames("dhcp")
 	existNet := b.managedNames("network")
@@ -400,7 +403,7 @@ func (b *uciBackend) importExisting() error {
 			st.Routes = append(st.Routes, r)
 		}
 	}
-	return b.storeBackend.replaceState(st)
+	return b.replaceState(st)
 }
 
 // startLimit computes dnsmasq start (host offset) + limit (count) from the pool
@@ -454,8 +457,8 @@ func (b *uciBackend) Leases() ([]Lease, error) {
 	if err != nil {
 		return []Lease{}, nil
 	}
-	statics, _ := b.storeBackend.Statics()
-	servers, _ := b.storeBackend.DHCPServers()
+	statics, _ := b.Statics()
+	servers, _ := b.DHCPServers()
 	staticByMAC := make(map[string]StaticLease, len(statics))
 	for _, s := range statics {
 		staticByMAC[s.MAC] = s

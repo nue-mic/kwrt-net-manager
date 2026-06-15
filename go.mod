@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/coder/websocket v1.8.14
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/go-chi/chi/v5 v5.2.5
+	github.com/go-chi/chi/v5 v5.3.0
 	github.com/minio/minio-go/v7 v7.2.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/shirou/gopsutil/v4 v4.26.4

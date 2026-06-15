@@ -39,13 +39,13 @@ type Channel struct {
 // AWS S3, Aliyun OSS, Cloudflare R2, MinIO, Backblaze B2, etc.
 type S3Config struct {
 	Endpoint        string `json:"endpoint"`          // host[:port], no scheme (e.g. s3.amazonaws.com, xxx.r2.cloudflarestorage.com)
-	Region          string `json:"region"`           // e.g. us-east-1, auto (R2)
-	Bucket          string `json:"bucket"`           // target bucket
-	AccessKeyID     string `json:"access_key_id"`    //
+	Region          string `json:"region"`            // e.g. us-east-1, auto (R2)
+	Bucket          string `json:"bucket"`            // target bucket
+	AccessKeyID     string `json:"access_key_id"`     //
 	SecretAccessKey string `json:"secret_access_key"` // sensitive; masked on API read
-	Prefix          string `json:"prefix"`           // optional base folder inside the bucket
-	UseSSL          bool   `json:"use_ssl"`          // https endpoint
-	PathStyle       bool   `json:"path_style"`       // path-style addressing (needed by MinIO / some OSS)
+	Prefix          string `json:"prefix"`            // optional base folder inside the bucket
+	UseSSL          bool   `json:"use_ssl"`           // https endpoint
+	PathStyle       bool   `json:"path_style"`        // path-style addressing (needed by MinIO / some OSS)
 }
 
 // WebDAVConfig holds a WebDAV target (Nextcloud, Jianguoyun, Synology, ...).

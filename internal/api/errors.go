@@ -13,16 +13,16 @@ import (
 type ErrorCode = apiresp.ErrorCode
 
 const (
-	CodeBadRequest      = apiresp.CodeBadRequest
-	CodeUnauthorized    = apiresp.CodeUnauthorized
-	CodeForbidden       = apiresp.CodeForbidden
-	CodeNotFound        = apiresp.CodeNotFound
-	CodeConflict        = apiresp.CodeConflict
-	CodeValidation      = apiresp.CodeValidation
-	CodeInternal        = apiresp.CodeInternal
-	CodeConfigNotFound  = apiresp.CodeConfigNotFound
-	CodeConfigExists    = apiresp.CodeConfigExists
-	CodeInvalidState    = apiresp.CodeInvalidState
+	CodeBadRequest          = apiresp.CodeBadRequest
+	CodeUnauthorized        = apiresp.CodeUnauthorized
+	CodeForbidden           = apiresp.CodeForbidden
+	CodeNotFound            = apiresp.CodeNotFound
+	CodeConflict            = apiresp.CodeConflict
+	CodeValidation          = apiresp.CodeValidation
+	CodeInternal            = apiresp.CodeInternal
+	CodeConfigNotFound      = apiresp.CodeConfigNotFound
+	CodeConfigExists        = apiresp.CodeConfigExists
+	CodeInvalidState        = apiresp.CodeInvalidState
 	CodeProxyNotFound       = apiresp.CodeProxyNotFound
 	CodeProxyExists         = apiresp.CodeProxyExists
 	CodeUpstreamFailure     = apiresp.CodeUpstreamFailure

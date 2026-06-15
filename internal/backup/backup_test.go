@@ -7,7 +7,7 @@ import (
 
 func TestSlug(t *testing.T) {
 	cases := map[string]string{
-		"每日":          "每日",
+		"每日":           "每日",
 		"daily backup": "daily-backup",
 		"a/b\\c":       "a-b-c",
 		"  spaced  ":   "spaced",

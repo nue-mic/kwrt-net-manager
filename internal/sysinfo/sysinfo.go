@@ -196,11 +196,11 @@ func Interfaces(ctx context.Context) ([]IfaceStats, error) {
 
 // ConnSummary aggregates TCP/UDP socket counts.
 type ConnSummary struct {
-	TCPTotal       int            `json:"tcp_total"`
-	UDPTotal       int            `json:"udp_total"`
-	TCPByStatus    map[string]int `json:"tcp_by_status"`
-	OwnedTCPConns  int            `json:"owned_tcp_conns"`
-	OwnedUDPConns  int            `json:"owned_udp_conns"`
+	TCPTotal      int            `json:"tcp_total"`
+	UDPTotal      int            `json:"udp_total"`
+	TCPByStatus   map[string]int `json:"tcp_by_status"`
+	OwnedTCPConns int            `json:"owned_tcp_conns"`
+	OwnedUDPConns int            `json:"owned_udp_conns"`
 }
 
 // Connections returns a counted summary plus the daemon-owned subset.
@@ -233,14 +233,14 @@ func Connections(ctx context.Context) (ConnSummary, error) {
 
 // ProcInfo describes the running daemon process.
 type ProcInfo struct {
-	PID         int32   `json:"pid"`
-	CPUPercent  float64 `json:"cpu_percent"`
-	RSSBytes    uint64  `json:"rss_bytes"`
-	VMSBytes    uint64  `json:"vms_bytes"`
-	NumThreads  int32   `json:"num_threads"`
-	NumGoroutines int   `json:"num_goroutines"`
-	OpenFiles   int     `json:"open_files,omitempty"`
-	StartTime   int64   `json:"start_time"`
+	PID           int32   `json:"pid"`
+	CPUPercent    float64 `json:"cpu_percent"`
+	RSSBytes      uint64  `json:"rss_bytes"`
+	VMSBytes      uint64  `json:"vms_bytes"`
+	NumThreads    int32   `json:"num_threads"`
+	NumGoroutines int     `json:"num_goroutines"`
+	OpenFiles     int     `json:"open_files,omitempty"`
+	StartTime     int64   `json:"start_time"`
 }
 
 // Process returns information about the daemon process itself.

@@ -48,8 +48,8 @@ func (s *SystemHandler) Version(w http.ResponseWriter, r *http.Request) {
 func (s *SystemHandler) Info(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	out := map[string]any{
-		"uptime_s":   int64(time.Since(s.startedAt).Seconds()),
-		"data_dir":   s.dataDir,
+		"uptime_s": int64(time.Since(s.startedAt).Seconds()),
+		"data_dir": s.dataDir,
 	}
 	if v, err := sysinfo.Host(ctx); err == nil {
 		out["host"] = v

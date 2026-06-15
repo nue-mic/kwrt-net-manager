@@ -10,13 +10,13 @@ func TestCompareVersions(t *testing.T) {
 		{"1.2.30", "1.2.30", 0},
 		{"1.2.30", "1.2.31", -1},
 		{"1.2.31", "1.2.30", 1},
-		{"v1.2.30", "1.2.31", -1},  // tolerant of leading v
-		{"1.2.30", "v1.2.30", 0},   // both forms equal
-		{"1.2.9", "1.2.10", -1},    // numeric, not lexical
-		{"1.10.0", "1.9.9", 1},     // minor numeric
-		{"2.0.0", "1.99.99", 1},    // major dominates
+		{"v1.2.30", "1.2.31", -1},   // tolerant of leading v
+		{"1.2.30", "v1.2.30", 0},    // both forms equal
+		{"1.2.9", "1.2.10", -1},     // numeric, not lexical
+		{"1.10.0", "1.9.9", 1},      // minor numeric
+		{"2.0.0", "1.99.99", 1},     // major dominates
 		{"1.2.30-rc1", "1.2.30", 0}, // pre-release suffix ignored
-		{"1.2", "1.2.0", 0},        // missing patch treated as 0
+		{"1.2", "1.2.0", 0},         // missing patch treated as 0
 	}
 	for _, c := range cases {
 		if got := CompareVersions(c.a, c.b); got != c.want {

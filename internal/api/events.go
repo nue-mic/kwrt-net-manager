@@ -101,9 +101,9 @@ func writeEvent(ctx context.Context, conn *websocket.Conn, e eventbus.Event) boo
 // clientCmd is the JSON shape accepted from connected clients to update
 // the subscription filter on the fly.
 type clientCmd struct {
-	Action    string              `json:"action"`
+	Action    string               `json:"action"`
 	Types     []eventbus.EventType `json:"types,omitempty"`
-	ConfigIDs []string            `json:"config_ids,omitempty"`
+	ConfigIDs []string             `json:"config_ids,omitempty"`
 }
 
 func readControl(ctx context.Context, conn *websocket.Conn, sub *eventbus.Subscription) {

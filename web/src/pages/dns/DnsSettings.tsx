@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, App, Button, Card, Divider, Form, Input, InputNumber, Switch, Tooltip, Typography } from 'antd';
+import { Alert, App, Button, Card, Col, Form, Input, InputNumber, Row, Switch, Tooltip, Typography } from 'antd';
 import { ThunderboltOutlined } from '@ant-design/icons';
 import PageCard from '../../components/PageCard';
 import { extractErr } from '../../hooks/useNetData';
@@ -125,7 +125,9 @@ export default function DnsSettingsPage() {
 
   return (
     <PageCard breadcrumb={['网络设置', 'DNS 设置', 'DNS 设置']} title="DNS 设置">
-      <Card size="small" title="基础 DNS" style={{ maxWidth: 720 }}>
+      <Row gutter={[16, 16]} align="top">
+        <Col xs={24} xl={12}>
+          <Card size="small" title="基础 DNS" style={{ height: '100%' }}>
         <Form form={sForm} layout="vertical">
           <Form.Item
             label="由本工具托管 DNS 设置"
@@ -175,14 +177,13 @@ export default function DnsSettingsPage() {
             保存基础 DNS
           </Button>
         </Form>
-      </Card>
-
-      <Divider />
-
-      <Card
+          </Card>
+        </Col>
+        <Col xs={24} xl={12}>
+          <Card
         size="small"
         title="DNS 加速（DoH over HTTPS）"
-        style={{ maxWidth: 720 }}
+        style={{ height: '100%' }}
         extra={
           dohUninstalled ? (
             <Tooltip title="安装 https-dns-proxy 后才能启用 DoH">
@@ -218,7 +219,9 @@ export default function DnsSettingsPage() {
             保存 DoH
           </Button>
         </Form>
-      </Card>
+          </Card>
+        </Col>
+      </Row>
 
       <Typography.Paragraph type="secondary" style={{ marginTop: 16 }}>
         说明：本页设置作用于本机（主路由/旁路由通用）。客户端需续租或重连后生效。

@@ -66,7 +66,6 @@ func (b *uciBackend) applyDNS() error {
 	routes, _ := b.storeBackend.DNSDomainRoutes()
 
 	var db strings.Builder // dhcp(@dnsmasq[0] + hostrecord) batch
-	bookChanged := false
 
 	// managed = 是否在接管 @dnsmasq[0]（DNS 设置开 或 DoH 开，二者任一都会改上游/noresolv）。
 	managed := st.Enabled || doh.Enabled
@@ -78,7 +77,6 @@ func (b *uciBackend) applyDNS() error {
 			v, _ := b.uciGet(dnsmasqSec + "." + k)
 			st.SavedStock[k] = v
 		}
-		bookChanged = true
 	}
 
 	// 2. stock 标量投射 / 回滚。
@@ -109,7 +107,6 @@ func (b *uciBackend) applyDNS() error {
 			restoreStock(&db, dnsmasqSec+"."+k, st.SavedStock[k])
 		}
 		st.SavedStock = nil
-		bookChanged = true
 	}
 
 	// 3. @dnsmasq[0] 的 server / address 列表：只删自己上次写过的精确值再加当前值。
@@ -126,9 +123,6 @@ func (b *uciBackend) applyDNS() error {
 	}
 	for _, v := range newAddrs {
 		fmt.Fprintf(&db, "add_list %s.address='%s'\n", dnsmasqSec, v)
-	}
-	if !strSlicesEqual(st.PrevServers, newServers) || !strSlicesEqual(st.PrevAddrs, newAddrs) {
-		bookChanged = true
 	}
 	st.PrevServers, st.PrevAddrs = newServers, newAddrs
 
@@ -153,10 +147,9 @@ func (b *uciBackend) applyDNS() error {
 	}
 	db.WriteString("commit dhcp\n")
 
-	// 持久化簿记（SavedStock / Prev*），供下次安全回滚。
-	if bookChanged {
-		_ = b.saveDNSBookkeeping(st.SavedStock, st.PrevServers, st.PrevAddrs)
-	}
+	// 持久化簿记（SavedStock / Prev*）——每次都写，保证 Prev* 恒等于我们刚写入 UCI 的值，
+	// 杜绝下次 apply 因簿记漂移而漏删旧 server/address（曾出现的残留孤儿）。
+	_ = b.saveDNSBookkeeping(st.SavedStock, st.PrevServers, st.PrevAddrs)
 
 	var firstErr error
 	if out, err := b.run.Run(db.String(), "uci", "batch"); err != nil {
@@ -169,10 +162,11 @@ func (b *uciBackend) applyDNS() error {
 	// 6. 强制客户端 DNS 代理：firewall redirect（固定具名节）。
 	b.applyDNSHijack(st.Enabled && st.ForceProxy)
 
-	// reload（不 restart）。失败置 pending 上报。
+	// 必须 restart（不能 reload）：dnsmasq 的 SIGHUP/reload 不会重读 conf 里的 address= / server=
+	// 等指令，只有 restart 才会重新加载——否则自定义解析/上游写进了 conf 却不生效。
 	if svc := dhcpService(); svc != "" {
-		if _, err := b.run.Run("", "/etc/init.d/"+svc, "reload"); err != nil {
-			b.pending, b.pendingMsg = true, svc+" reload 失败，DNS 配置已保存但未生效"
+		if _, err := b.run.Run("", "/etc/init.d/"+svc, "restart"); err != nil {
+			b.pending, b.pendingMsg = true, svc+" restart 失败，DNS 配置已保存但未生效"
 		}
 	}
 	return firstErr
@@ -305,16 +299,4 @@ func restoreStock(sb *strings.Builder, key, old string) {
 	} else {
 		setKV(sb, key, old)
 	}
-}
-
-func strSlicesEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }

@@ -39,7 +39,10 @@ export interface StaticLease {
   dns_secondary: string;
   remark: string;
   enabled: boolean;
+  route_push: boolean;
 }
+
+export type RoutePushMode = 'off' | 'all' | 'tagged';
 
 export interface Lease {
   hostname: string;
@@ -75,6 +78,7 @@ export interface Route {
   metric: number;
   remark: string;
   enabled: boolean;
+  push_to_clients: boolean;
 }
 
 export interface RouteEntry {
@@ -145,6 +149,14 @@ export async function batchServers(action: BatchAction, ids: string[]): Promise<
 }
 export async function restartDHCP(): Promise<void> {
   await client.post('/api/v1/dhcp/restart');
+}
+// 路由下发到客户端总开关（DHCP option 121/249）。GET 复用服务端列表里的 route_push_mode。
+export async function getRoutePushMode(): Promise<RoutePushMode> {
+  const { data } = await client.get('/api/v1/dhcp/servers');
+  return (data.route_push_mode as RoutePushMode) ?? 'off';
+}
+export async function setRoutePushMode(mode: RoutePushMode): Promise<void> {
+  await client.put('/api/v1/dhcp/route-push', { mode });
 }
 
 // ---------- DHCP 静态分配 ----------

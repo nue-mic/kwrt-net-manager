@@ -174,6 +174,22 @@ func (b *storeBackend) SaveRoutes(list []Route) error {
 	return b.flushLocked()
 }
 
+func (b *storeBackend) RoutePushMode() (string, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.st.RoutePushMode == "" {
+		return RoutePushOff, nil
+	}
+	return b.st.RoutePushMode, nil
+}
+
+func (b *storeBackend) SaveRoutePushMode(mode string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.st.RoutePushMode = mode
+	return b.flushLocked()
+}
+
 // ---- simulated leases ----
 
 // fakeDevices seeds deterministic hostnames for synthesized dynamic leases.

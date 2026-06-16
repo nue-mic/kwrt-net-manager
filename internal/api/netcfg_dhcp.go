@@ -18,7 +18,23 @@ func (h *NetcfgHandler) ListServers(w http.ResponseWriter, r *http.Request) {
 	if items == nil {
 		items = []netcfg.DHCPServer{}
 	}
-	WriteJSON(w, http.StatusOK, map[string]any{"items": items})
+	mode, _ := h.svc.GetRoutePushMode()
+	WriteJSON(w, http.StatusOK, map[string]any{"items": items, "route_push_mode": mode})
+}
+
+// SetRoutePushMode PUT /api/v1/dhcp/route-push {mode} — 路由下发到客户端总开关。
+func (h *NetcfgHandler) SetRoutePushMode(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Mode string `json:"mode"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if err := h.svc.SetRoutePushMode(body.Mode); err != nil {
+		h.writeNetErr(w, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]any{"route_push_mode": body.Mode})
 }
 
 // GetServer GET /api/v1/dhcp/servers/{id}

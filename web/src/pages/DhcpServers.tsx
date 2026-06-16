@@ -58,6 +58,7 @@ export default function DhcpServersPage() {
   const [saving, setSaving] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const [batching, setBatching] = useState(false);
+  const [routePush, setRoutePush] = useState<net.RoutePushMode>('off');
   const [form] = Form.useForm<ServerFormValues>();
 
   useEffect(() => {
@@ -70,6 +71,12 @@ export default function DhcpServersPage() {
         setInterfaces(ifs);
       } catch (e) {
         if (alive) message.error(extractErr(e));
+      }
+      try {
+        const m = await net.getRoutePushMode();
+        if (alive) setRoutePush(m);
+      } catch {
+        /* 可选，失败静默 */
       }
       try {
         const info = await net.getDHCPService();
@@ -195,6 +202,18 @@ export default function DhcpServersPage() {
     }
   };
 
+  const onChangeRoutePush = async (mode: net.RoutePushMode) => {
+    const prev = routePush;
+    setRoutePush(mode);
+    try {
+      await net.setRoutePushMode(mode);
+      message.success('路由下发模式已保存');
+    } catch (e) {
+      setRoutePush(prev);
+      message.error(extractErr(e));
+    }
+  };
+
   const onRestart = async () => {
     setRestarting(true);
     try {
@@ -298,6 +317,20 @@ export default function DhcpServersPage() {
               onChange={(e) => setKeyword(e.target.value)}
               onSearch={setKeyword}
             />
+            <Space size={6}>
+              <Typography.Text type="secondary">路由下发:</Typography.Text>
+              <Select
+                size="small"
+                style={{ width: 124 }}
+                value={routePush}
+                onChange={onChangeRoutePush}
+                options={[
+                  { label: '关闭', value: 'off' },
+                  { label: '全部客户端', value: 'all' },
+                  { label: '仅指定设备', value: 'tagged' },
+                ]}
+              />
+            </Space>
           </Space>
           <Space size="middle" wrap>
             <Popconfirm title="确认重启 DHCP 服务？" onConfirm={onRestart}>

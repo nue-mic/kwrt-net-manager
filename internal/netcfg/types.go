@@ -56,7 +56,10 @@ type StaticLease struct {
 	DNSSecondary string `json:"dns_secondary"`
 	Remark       string `json:"remark"`  // 备注
 	Enabled      bool   `json:"enabled"` // 状态
-	Managed      bool   `json:"managed,omitempty"`
+	// RoutePush：在 RoutePushMode=="tagged"（仅指定设备）模式下，是否把已标记推送的静态
+	// 路由经 tag 下发给「这台」设备。RoutePushMode=="all" 时该字段无意义（全员下发）。
+	RoutePush bool `json:"route_push"`
+	Managed   bool `json:"managed,omitempty"`
 }
 
 // Lease is one active DHCP lease (iKuai DHCP终端列表). Read-only; the source is
@@ -106,13 +109,23 @@ type Route struct {
 	Metric    int    `json:"metric"`    // 优先级（越小越优先）
 	Remark    string `json:"remark"`    // 备注
 	Enabled   bool   `json:"enabled"`   // 状态
-	Managed   bool   `json:"managed,omitempty"`
+	// PushToClients：把本路由经 DHCP option 121/249 下发给客户端，让"网关指向主路由"的
+	// 设备也能把该网段流量引到本旁路由（仅 IPv4 有效；受 State.RoutePushMode 总开关控制）。
+	PushToClients bool `json:"push_to_clients"`
+	Managed       bool `json:"managed,omitempty"`
 }
 
 // Route families.
 const (
 	FamilyIPv4 = "ipv4"
 	FamilyIPv6 = "ipv6"
+)
+
+// RoutePushMode values — how PushToClients routes are delivered via DHCP.
+const (
+	RoutePushOff    = "off"    // 不下发
+	RoutePushAll    = "all"    // 给池内全部客户端下发（pool 级 option 121/249）
+	RoutePushTagged = "tagged" // 仅给 RoutePush 的静态分配设备下发（host tag 级）
 )
 
 // RouteEntry is one row of the live kernel routing table (iKuai 当前路由表).
@@ -149,6 +162,10 @@ type State struct {
 	ARPBind     bool          `json:"arp_bind"`
 	ACL         ACL           `json:"acl"`
 	Routes      []Route       `json:"routes"`
+	// RoutePushMode 控制把已标记 PushToClients 的静态路由经 DHCP 下发给客户端：
+	// "off"（默认）不下发；"all" 给所在池的全部客户端下发；"tagged" 仅给静态分配中
+	// RoutePush=true 的设备下发。空串视为 "off"。
+	RoutePushMode string `json:"route_push_mode,omitempty"`
 	// NetIfaces holds LAN/WAN configs for the store (dev) backend; the uci
 	// backend reads/writes /etc/config/network directly and ignores this field.
 	NetIfaces []NetIface `json:"net_ifaces,omitempty"`
@@ -162,7 +179,7 @@ type State struct {
 
 // CloneState returns a deep copy of s (slices are freshly allocated).
 func CloneState(s State) State {
-	out := State{ARPBind: s.ARPBind}
+	out := State{ARPBind: s.ARPBind, RoutePushMode: s.RoutePushMode}
 	out.DHCPServers = append([]DHCPServer(nil), s.DHCPServers...)
 	for i := range out.DHCPServers {
 		out.DHCPServers[i].Exclude = append([]string(nil), s.DHCPServers[i].Exclude...)

@@ -29,6 +29,7 @@ type DHCPServer struct {
 	Enabled       bool           `json:"enabled"`        // 状态（启用/停用）
 	IPStart       string         `json:"ip_start"`       // 客户端地址-起
 	IPEnd         string         `json:"ip_end"`         // 客户端地址-止
+	Force         bool           `json:"force"`          // 强制下发：即便探测到本网段已有 DHCP 服务器也强制服务（默认开，旁路由必备）
 	Netmask       string         `json:"netmask"`        // 子网掩码
 	Gateway       string         `json:"gateway"`        // 网关
 	DNSPrimary    string         `json:"dns_primary"`    // 首选/主 DNS

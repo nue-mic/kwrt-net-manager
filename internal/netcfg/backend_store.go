@@ -288,7 +288,7 @@ func (b *storeBackend) RouteTable(family string) ([]RouteEntry, error) {
 func seedState() State {
 	st := State{
 		DHCPServers: []DHCPServer{{
-			ID: "dhcp_seedlan", Interface: "lan", Enabled: true,
+			ID: "dhcp_seedlan", Interface: "lan", Enabled: true, Force: true,
 			IPStart: "192.168.1.100", IPEnd: "192.168.1.200", Netmask: "255.255.255.0",
 			Gateway: "192.168.1.1", DNSPrimary: "223.5.5.5", DNSSecondary: "114.114.114.114",
 			LeaseMinutes: 120, Exclude: []string{}, CustomOptions: []CustomOption{},

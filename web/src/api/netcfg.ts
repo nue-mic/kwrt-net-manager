@@ -17,6 +17,7 @@ export interface DHCPServer {
   enabled: boolean;
   ip_start: string;
   ip_end: string;
+  force: boolean;
   netmask: string;
   gateway: string;
   dns_primary: string;

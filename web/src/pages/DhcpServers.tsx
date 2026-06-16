@@ -11,6 +11,7 @@ import {
   Popconfirm,
   Select,
   Space,
+  Switch,
   Table,
   Tag,
   Typography,
@@ -32,6 +33,7 @@ interface ServerFormValues {
   interface: string;
   ip_start: string;
   ip_end: string;
+  force: boolean;
   exclude_text: string;
   netmask: string;
   gateway: string;
@@ -97,6 +99,7 @@ export default function DhcpServersPage() {
         interface: record.interface,
         ip_start: record.ip_start,
         ip_end: record.ip_end,
+        force: record.force,
         exclude_text: record.exclude.join('\n'),
         netmask: record.netmask,
         gateway: record.gateway,
@@ -108,6 +111,7 @@ export default function DhcpServersPage() {
     } else {
       form.resetFields();
       form.setFieldsValue({
+        force: true, // 默认强制下发：旁路由/同网段多 DHCP 时也能稳定分配
         exclude_text: '',
         lease_minutes: 120,
         custom_options: [],
@@ -132,6 +136,7 @@ export default function DhcpServersPage() {
         enabled: editing ? editing.enabled : true,
         ip_start: v.ip_start,
         ip_end: v.ip_end,
+        force: v.force ?? true,
         netmask: v.netmask,
         gateway: v.gateway,
         dns_primary: v.dns_primary,
@@ -428,6 +433,14 @@ export default function DhcpServersPage() {
             rules={[{ required: true, message: '请输入租期' }]}
           >
             <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
+            label="强制下发 DHCP"
+            name="force"
+            valuePropName="checked"
+            extra="即便本网段已存在其它 DHCP 服务器，也强制由本机下发（跳过 dnsmasq 的探测礼让）。旁路由/主路由同段时务必开启，否则设备可能拿不到地址。默认开启。"
+          >
+            <Switch />
           </Form.Item>
           <Typography.Text strong>自定义DHCP选项</Typography.Text>
           <Form.List name="custom_options">

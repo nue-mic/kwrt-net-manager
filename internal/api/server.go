@@ -99,6 +99,7 @@ func NewRouter(d Deps) http.Handler {
 		r.Get("/api/v1/system/disk", sys.Disk)
 		r.Get("/api/v1/system/network", sys.Network)
 		r.Get("/api/v1/system/connections", sys.Connections)
+		r.Get("/api/v1/system/conntrack", sys.Conntrack)
 		r.Get("/api/v1/system/process", sys.Process)
 
 		// Scheduled backup: storage channels, schedules, run history.

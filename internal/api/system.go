@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -130,6 +131,23 @@ func (s *SystemHandler) Network(w http.ResponseWriter, r *http.Request) {
 // owned subset.
 func (s *SystemHandler) Connections(w http.ResponseWriter, r *http.Request) {
 	v, err := sysinfo.Connections(r.Context())
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, CodeInternal, err.Error(), nil)
+		return
+	}
+	WriteJSON(w, http.StatusOK, v)
+}
+
+// Conntrack returns the per-flow connection list (内核 conntrack) sorted by
+// traffic — the data behind 爱快「连接详情」. ?limit=N caps the rows (default 100).
+func (s *SystemHandler) Conntrack(w http.ResponseWriter, r *http.Request) {
+	limit := 100
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	v, err := sysinfo.ConnFlows(limit)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, CodeInternal, err.Error(), nil)
 		return

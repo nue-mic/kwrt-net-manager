@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  Card, Col, Row, Statistic, Tag, Typography, Space, Button, Empty, Progress, Table, Drawer, Descriptions,
+  Card, Col, Row, Statistic, Tag, Typography, Space, Button, Empty, Progress, Table, Drawer,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -44,6 +44,8 @@ function fmtUptime(sec: number): string {
 interface SysMetrics { cpu: number; mem: number; memUsed: number; memTotal: number; disk: number; diskUsed: number; diskTotal: number; uptime: number; }
 interface NicRate { up: number; down: number; }
 interface Conns { tcp: number; udp: number; byStatus: Record<string, number>; ownedTcp: number; ownedUdp: number; }
+interface ConnFlow { family: string; proto: string; src: string; dst: string; packets: number; bytes: number; }
+interface FlowResult { flows: ConnFlow[]; total: number; acct_available: boolean; }
 
 // 全量实时轮询：网卡(含全部IP)+总览+在线设备+系统资源+连接数，每 intervalMs 刷新一次，
 // 并按 rx/tx 差值算每块网卡与总的实时速率（满足「物理连接区块实时刷新」）。
@@ -167,10 +169,26 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<net.NetStatus | null>(null);
   const [connOpen, setConnOpen] = useState(false);
+  const [flows, setFlows] = useState<FlowResult>({ flows: [], total: 0, acct_available: false });
   const { nics, ov, leases, sys, conns, rates, total, series, ts } = useDashboard();
   const counts = useCounts();
 
   useEffect(() => { net.getStatus().then(setStatus).catch(() => {}); }, []);
+
+  // 连接详情逐条明细（conntrack）：抽屉打开时每 3s 拉一次，关闭即停。
+  useEffect(() => {
+    if (!connOpen) return;
+    let alive = true;
+    const tick = async () => {
+      try {
+        const r = await client.get('/api/v1/system/conntrack?limit=100').then((x) => x.data);
+        if (alive) setFlows({ flows: r.flows ?? [], total: r.total ?? 0, acct_available: !!r.acct_available });
+      } catch { /* 静默 */ }
+    };
+    void tick();
+    const id = setInterval(tick, 3000);
+    return () => { alive = false; clearInterval(id); };
+  }, [connOpen]);
 
   const online = ov.wan_up > 0 || ov.lan_up > 0;
   const wanIPs = useMemo(
@@ -373,28 +391,40 @@ export default function Dashboard() {
         ))}
       </Row>
 
-      {/* 连接详情抽屉 */}
-      <Drawer title="连接详情" width={420} open={connOpen} onClose={() => setConnOpen(false)}>
-        <Descriptions column={1} bordered size="small">
-          <Descriptions.Item label="TCP 连接总数">{conns.tcp}</Descriptions.Item>
-          <Descriptions.Item label="UDP 连接总数">{conns.udp}</Descriptions.Item>
-          <Descriptions.Item label="本工具占用">TCP {conns.ownedTcp} · UDP {conns.ownedUdp}</Descriptions.Item>
-        </Descriptions>
-        <Typography.Paragraph type="secondary" style={{ margin: '16px 0 8px' }}>TCP 按状态分布</Typography.Paragraph>
-        {Object.keys(conns.byStatus).length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="无数据" />
-        ) : (
-          <Space direction="vertical" style={{ width: '100%' }} size={6}>
-            {Object.entries(conns.byStatus).sort((a, b) => b[1] - a[1]).map(([k, v]) => (
-              <div key={k} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Tag color={k === 'ESTABLISHED' ? 'success' : k === 'LISTEN' ? 'blue' : 'default'}>{k}</Tag>
-                <Text strong>{v}</Text>
-              </div>
-            ))}
-          </Space>
+      {/* 连接详情抽屉：逐条 conntrack 明细（仿爱快），按流量降序 */}
+      <Drawer title={`连接详情（conntrack 共 ${flows.total} 条）`} width={820} open={connOpen} onClose={() => setConnOpen(false)}>
+        <Row gutter={8} style={{ marginBottom: 12 }}>
+          <Col span={8}><Card size="small"><Statistic title="TCP" value={conns.tcp} valueStyle={{ fontSize: 20 }} /></Card></Col>
+          <Col span={8}><Card size="small"><Statistic title="UDP" value={conns.udp} valueStyle={{ fontSize: 20 }} /></Card></Col>
+          <Col span={8}><Card size="small"><Statistic title="本工具占用" value={conns.ownedTcp + conns.ownedUdp} valueStyle={{ fontSize: 20 }} /></Card></Col>
+        </Row>
+        <Space wrap size={6} style={{ marginBottom: 12 }}>
+          {Object.entries(conns.byStatus).sort((a, b) => b[1] - a[1]).map(([k, v]) => (
+            <Tag key={k} color={k === 'ESTABLISHED' ? 'success' : k === 'LISTEN' ? 'blue' : 'default'}>{k} {v}</Tag>
+          ))}
+        </Space>
+        {!flows.acct_available && flows.flows.length > 0 && (
+          <Typography.Paragraph type="warning" style={{ fontSize: 12 }}>
+            未开启 conntrack 流量计数（nf_conntrack_acct），故「传输」为 0；如需按流量统计，可在系统里执行 sysctl net.netfilter.nf_conntrack_acct=1。
+          </Typography.Paragraph>
         )}
-        <Typography.Paragraph type="secondary" style={{ marginTop: 16, fontSize: 12 }}>
-          数据来自本机 TCP/UDP 套接字统计（gopsutil），每 4 秒刷新。
+        <Table<ConnFlow>
+          rowKey={(r) => `${r.proto}-${r.src}-${r.dst}`}
+          size="small"
+          dataSource={flows.flows}
+          pagination={{ pageSize: 20, showTotal: (t) => `前 ${t} 条（按流量）` }}
+          scroll={{ x: 'max-content' }}
+          locale={{ emptyText: '暂无连接（或本机无 conntrack）' }}
+          columns={[
+            { title: '网络', dataIndex: 'family', width: 70, render: (v: string) => <Tag color={v === 'ipv6' ? 'purple' : 'geekblue'}>{v === 'ipv6' ? 'IPv6' : 'IPv4'}</Tag> },
+            { title: '协议', dataIndex: 'proto', width: 70, render: (v: string) => <Tag>{(v || '-').toUpperCase()}</Tag> },
+            { title: '源地址', dataIndex: 'src', render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</span> },
+            { title: '目标', dataIndex: 'dst', render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</span> },
+            { title: '传输', dataIndex: 'bytes', width: 150, render: (b: number, r) => <span>{fmtBytes(b)} <Text type="secondary" style={{ fontSize: 12 }}>({r.packets} 包)</Text></span> },
+          ]}
+        />
+        <Typography.Paragraph type="secondary" style={{ marginTop: 12, fontSize: 12 }}>
+          数据来自内核 conntrack（/proc/net/nf_conntrack），每 3 秒刷新，按流量降序取前 100 条。
         </Typography.Paragraph>
       </Drawer>
     </PageCard>

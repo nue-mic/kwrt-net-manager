@@ -24,23 +24,19 @@ type CustomOption struct {
 // DHCPServer is one DHCP address pool bound to an interface (iKuai DHCP服务端).
 // Maps to an OpenWrt `config dhcp` section.
 type DHCPServer struct {
-	ID               string         `json:"id"`
-	Interface        string         `json:"interface"`          // 服务接口（lan/lan1/...）
-	Enabled          bool           `json:"enabled"`            // 状态（启用/停用）
-	IPStart          string         `json:"ip_start"`           // 客户端地址-起
-	IPEnd            string         `json:"ip_end"`             // 客户端地址-止
-	Netmask          string         `json:"netmask"`            // 子网掩码
-	Gateway          string         `json:"gateway"`            // 网关
-	DNSPrimary       string         `json:"dns_primary"`        // 首选/主 DNS
-	DNSSecondary     string         `json:"dns_secondary"`      // 备选/次 DNS
-	LeaseMinutes     int            `json:"lease_minutes"`      // 租期（分钟）
-	Exclude          []string       `json:"exclude"`            // 排除地址（每行一条）
-	ExpiredKeepHours int            `json:"expired_keep_hours"` // 过期地址保留时间（小时）
-	CheckIP          bool           `json:"check_ip"`           // 检查接口 IP 有效性
-	RelayOnly        bool           `json:"relay_only"`         // 只应用于 DHCP 中继
-	AssocInterface   string         `json:"assoc_interface"`    // 关联接口（默认 all/全部线路）
-	CustomOptions    []CustomOption `json:"custom_options"`     // 自定义 DHCP 选项
-	Remaining        int            `json:"remaining"`          // 剩余地址（只读，计算值）
+	ID            string         `json:"id"`
+	Interface     string         `json:"interface"`      // 服务接口（lan/lan1/...）
+	Enabled       bool           `json:"enabled"`        // 状态（启用/停用）
+	IPStart       string         `json:"ip_start"`       // 客户端地址-起
+	IPEnd         string         `json:"ip_end"`         // 客户端地址-止
+	Netmask       string         `json:"netmask"`        // 子网掩码
+	Gateway       string         `json:"gateway"`        // 网关
+	DNSPrimary    string         `json:"dns_primary"`    // 首选/主 DNS
+	DNSSecondary  string         `json:"dns_secondary"`  // 备选/次 DNS
+	LeaseMinutes  int            `json:"lease_minutes"`  // 租期（分钟）
+	Exclude       []string       `json:"exclude"`        // 排除地址（每行一条，原生经占位 host 保留实现）
+	CustomOptions []CustomOption `json:"custom_options"` // 自定义 DHCP 选项
+	Remaining     int            `json:"remaining"`      // 剩余地址（只读，计算值）
 	// Managed 标记该项是否由本工具管理（写入 UCI）。导入的存量项为 false（仅显示），
 	// 用户创建/编辑后置 true。uci 后端只把 Managed=true 的项投射到 /etc/config。
 	Managed bool `json:"managed,omitempty"`

@@ -216,6 +216,195 @@ func TestUCIForceEnableOnOdhcpd(t *testing.T) {
 	}
 }
 
+func TestUCIDnsmasqForcesMaindhcpOff(t *testing.T) {
+	// dnsmasq present → it must stay the DHCPv4 server; a stale odhcpd.maindhcp=1
+	// silently kills dnsmasq's dhcp-range, so projection must force it back to 0.
+	old := dhcpService
+	dhcpService = func() string { return "dnsmasq" }
+	defer func() { dhcpService = old }()
+	f := &fakeRunner{
+		show: map[string]string{"dhcp": "", "network": ""},
+		get:  map[string]string{"dhcp.odhcpd": "odhcpd", "network.lan.ipaddr": "192.168.1.1"},
+	}
+	be := newTestUCI(t, f)
+	svc := NewService(be, nil, nil)
+	svc.idFn = func(p string) string { return p + "_e" }
+	if _, err := svc.CreateDHCPServer(DHCPServer{
+		Interface: "lan", Enabled: true, IPStart: "192.168.1.100", IPEnd: "192.168.1.200",
+		Netmask: "255.255.255.0", Gateway: "192.168.1.1", LeaseMinutes: 120,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	dhcp := f.batchContaining("commit dhcp")
+	if !strings.Contains(dhcp, "set dhcp.odhcpd.maindhcp='0'") {
+		t.Errorf("dnsmasq box must force maindhcp=0\n--- batch ---\n%s", dhcp)
+	}
+	if strings.Contains(dhcp, "set dhcp.odhcpd.maindhcp='1'") {
+		t.Errorf("dnsmasq box must never set maindhcp=1\n--- batch ---\n%s", dhcp)
+	}
+}
+
+func TestUCIStaticPerHostGatewayDNSViaTag(t *testing.T) {
+	// Per-host gateway/DNS must project natively via a `config tag` carrying
+	// option 3/6, with the host pointed at that tag.
+	f := &fakeRunner{
+		show: map[string]string{"dhcp": "", "network": sampleNetShow},
+		get:  map[string]string{"network.lan.ipaddr": "192.168.1.1", "network.lan.netmask": "255.255.255.0", "network.lan.device": "br-lan"},
+	}
+	be := newTestUCI(t, f)
+	svc := NewService(be, nil, nil)
+	svc.idFn = func(p string) string { return p + "_g" }
+	if _, err := svc.CreateStatic(StaticLease{
+		IP: "192.168.1.50", MAC: "aa:bb:cc:dd:ee:01", Interface: "lan",
+		Gateway: "192.168.1.254", DNSPrimary: "1.1.1.1", DNSSecondary: "8.8.8.8", Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	dhcp := f.batchContaining("commit dhcp")
+	for _, w := range []string{
+		"set dhcp.host_g=host",
+		"set dhcp.host_g_t=tag",
+		"add_list dhcp.host_g_t.dhcp_option='3,192.168.1.254'",
+		"add_list dhcp.host_g_t.dhcp_option='6,1.1.1.1,8.8.8.8'",
+		"set dhcp.host_g.tag='host_g_t'",
+	} {
+		if !strings.Contains(dhcp, w) {
+			t.Errorf("per-host tag batch missing %q\n--- batch ---\n%s", w, dhcp)
+		}
+	}
+}
+
+func TestUCIPoolExcludeAsReservations(t *testing.T) {
+	// Excluded addresses must project as placeholder host reservations (dnsmasq
+	// keeps reserved IPs out of the dynamic pool); ranges expand per IP.
+	f := &fakeRunner{
+		show: map[string]string{"dhcp": "", "network": sampleNetShow},
+		get:  map[string]string{"network.lan.ipaddr": "192.168.1.1", "network.lan.netmask": "255.255.255.0"},
+	}
+	be := newTestUCI(t, f)
+	svc := NewService(be, nil, nil)
+	svc.idFn = func(p string) string { return p + "_p" }
+	if _, err := svc.CreateDHCPServer(DHCPServer{
+		Interface: "lan", Enabled: true, IPStart: "192.168.1.100", IPEnd: "192.168.1.200",
+		LeaseMinutes: 120, Exclude: []string{"192.168.1.150", "192.168.1.160-192.168.1.161"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	dhcp := f.batchContaining("commit dhcp")
+	for _, w := range []string{
+		"set dhcp.dhcp_p_x_192_168_1_150=host",
+		"set dhcp.dhcp_p_x_192_168_1_150.ip='192.168.1.150'",
+		"set dhcp.dhcp_p_x_192_168_1_150.mac='02:00:c0:a8:01:96'", // 192.168.1.150
+		"set dhcp.dhcp_p_x_192_168_1_160.ip='192.168.1.160'",
+		"set dhcp.dhcp_p_x_192_168_1_161.ip='192.168.1.161'",
+	} {
+		if !strings.Contains(dhcp, w) {
+			t.Errorf("exclude reservation batch missing %q\n--- batch ---\n%s", w, dhcp)
+		}
+	}
+}
+
+func TestUCIBlacklistIgnoreHost(t *testing.T) {
+	// Blacklist must use the native `option ip 'ignore'` (config host `ignore` is a
+	// no-op in OpenWrt's dnsmasq init, and a mac-only host is dropped).
+	f := &fakeRunner{
+		show: map[string]string{"dhcp": "", "network": sampleNetShow},
+		get:  map[string]string{"network.lan.ipaddr": "192.168.1.1", "network.lan.netmask": "255.255.255.0"},
+	}
+	be := newTestUCI(t, f)
+	svc := NewService(be, nil, nil)
+	svc.idFn = func(p string) string { return p + "_b" }
+	if _, err := svc.AddACLEntry(ACLEntry{MAC: "aa:bb:cc:dd:ee:0b", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	dhcp := f.batchContaining("commit dhcp")
+	for _, w := range []string{"set dhcp.acl_b=host", "set dhcp.acl_b.mac='AA:BB:CC:DD:EE:0B'", "set dhcp.acl_b.ip='ignore'"} {
+		if !strings.Contains(dhcp, w) {
+			t.Errorf("blacklist batch missing %q\n--- batch ---\n%s", w, dhcp)
+		}
+	}
+}
+
+func TestUCIWhitelistDynamicDHCPOff(t *testing.T) {
+	// Whitelist mode: every pool gets dynamicdhcp='0' (serve only known hosts) and
+	// each allowed MAC is reserved a free IP from the pool. Blacklist deletes it.
+	f := &fakeRunner{
+		show: map[string]string{"dhcp": "", "network": sampleNetShow},
+		get:  map[string]string{"network.lan.ipaddr": "192.168.1.1", "network.lan.netmask": "255.255.255.0"},
+	}
+	be := newTestUCI(t, f)
+	svc := NewService(be, nil, nil)
+	svc.idFn = func(p string) string { return p + "_w" }
+	if _, err := svc.CreateDHCPServer(DHCPServer{
+		Interface: "lan", Enabled: true, IPStart: "192.168.1.100", IPEnd: "192.168.1.200", LeaseMinutes: 120,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if dhcp := f.batchContaining("commit dhcp"); !strings.Contains(dhcp, "delete dhcp.dhcp_w.dynamicdhcp") {
+		t.Errorf("blacklist mode must delete dynamicdhcp\n%s", dhcp)
+	}
+	if _, err := svc.SetACLMode(ACLWhitelist); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.AddACLEntry(ACLEntry{MAC: "aa:bb:cc:dd:ee:02", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	dhcp := f.batchContaining("commit dhcp")
+	for _, w := range []string{
+		"set dhcp.dhcp_w.dynamicdhcp='0'",
+		"set dhcp.acl_w=host",
+		"set dhcp.acl_w.mac='AA:BB:CC:DD:EE:02'",
+		"set dhcp.acl_w.ip='192.168.1.100'", // first free IP in the pool
+	} {
+		if !strings.Contains(dhcp, w) {
+			t.Errorf("whitelist batch missing %q\n--- batch ---\n%s", w, dhcp)
+		}
+	}
+}
+
+func TestUCIARPBindNeigh(t *testing.T) {
+	// With ARP-bind on, managed reservations install static neigh entries.
+	f := &fakeRunner{
+		show: map[string]string{"dhcp": "", "network": sampleNetShow},
+		get:  map[string]string{"network.lan.ipaddr": "192.168.1.1", "network.lan.netmask": "255.255.255.0", "network.lan.device": "br-lan"},
+	}
+	be := newTestUCI(t, f)
+	svc := NewService(be, nil, nil)
+	svc.idFn = func(p string) string { return p + "_a" }
+	if _, err := svc.CreateStatic(StaticLease{IP: "192.168.1.51", MAC: "aa:bb:cc:dd:ee:03", Interface: "lan", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SetARPBind(true); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, c := range f.calls {
+		if c.name == "ip" && len(c.args) >= 5 && c.args[0] == "neigh" && c.args[1] == "replace" && c.args[2] == "192.168.1.51" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("ARP-bind on should issue `ip neigh replace 192.168.1.51 ...`")
+	}
+}
+
+func TestUCIPoolRejectsOutOfSubnetRange(t *testing.T) {
+	// The Service must reject a pool range outside the bound interface subnet
+	// (the old silent &0xFF truncation bug) with a clear error.
+	f := &fakeRunner{
+		show: map[string]string{"dhcp": "", "network": sampleNetShow},
+		get:  map[string]string{"network.lan.ipaddr": "192.168.1.1", "network.lan.netmask": "255.255.255.0"},
+	}
+	be := newTestUCI(t, f)
+	svc := NewService(be, nil, nil)
+	_, err := svc.CreateDHCPServer(DHCPServer{
+		Interface: "lan", Enabled: true, IPStart: "192.168.2.100", IPEnd: "192.168.2.200", LeaseMinutes: 120,
+	})
+	if err == nil || !strings.Contains(err.Error(), "不在接口") {
+		t.Errorf("expected out-of-subnet rejection, got %v", err)
+	}
+}
+
 func TestLeasetimeToMin(t *testing.T) {
 	cases := map[string]int{"12h": 720, "120m": 120, "1d": 1440, "infinite": 0, "": 0, "30s": 1, "3600": 60}
 	for in, want := range cases {

@@ -176,7 +176,7 @@ const MainLayout: React.FC = () => {
           {
             key: 'ipv6',
             icon: <GlobalOutlined />,
-            label: 'IPv6',
+            label: 'IPv6 设置',
             children: [
               { key: '/ipv6/settings', label: 'IPv6设置' },
               { key: '/ipv6/line-detail', label: 'IPv6线路详情' },

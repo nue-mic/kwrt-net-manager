@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { App, Button, Input, Select, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import { useNavigate } from 'react-router-dom';
 import PageCard from '../components/PageCard';
 import { useNetData, extractErr } from '../hooks/useNetData';
 import * as net from '../api/netcfg';
@@ -19,6 +20,7 @@ function formatRemaining(seconds: number): string {
 
 export default function DhcpLeasesPage() {
   const { message } = App.useApp();
+  const navigate = useNavigate();
   const { data, loading, reload } = useNetData<net.Lease[]>(() => net.listLeases(), []);
   const { data: ifaces } = useNetData<net.NetInterface[]>(() => net.listInterfaces(), []);
 
@@ -161,10 +163,16 @@ export default function DhcpLeasesPage() {
     {
       title: '操作',
       key: 'actions',
-      width: 200,
+      width: 220,
+      fixed: 'right',
       render: (_, r) => (
-        <Space size="middle">
-          <Typography.Link onClick={() => onReserveRow(r)}>加入静态分配</Typography.Link>
+        <Space size="middle" style={{ whiteSpace: 'nowrap' }}>
+          {/* 已是静态分配的终端：跳到「DHCP 静态分配」查看；动态的才显示「加入静态分配」 */}
+          {r.static ? (
+            <Typography.Link onClick={() => navigate(`/dhcp/statics?q=${encodeURIComponent(r.ip)}`)}>查看</Typography.Link>
+          ) : (
+            <Typography.Link onClick={() => onReserveRow(r)}>加入静态分配</Typography.Link>
+          )}
           <Typography.Link onClick={() => onBlacklistRow(r)}>加入 MAC 黑名单</Typography.Link>
         </Space>
       ),
@@ -230,6 +238,7 @@ export default function DhcpLeasesPage() {
           onChange: (k) => setSelected(k as string[]),
         }}
         columns={columns}
+        scroll={{ x: 'max-content' }}
         pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (t) => `共 ${t} 条` }}
       />
     </PageCard>

@@ -18,7 +18,7 @@ import {
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { PlusOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { PlusOutlined, ThunderboltOutlined, ReloadOutlined } from '@ant-design/icons';
 import PageCard from '../components/PageCard';
 import { useNetData, extractErr } from '../hooks/useNetData';
 import * as net from '../api/netcfg';
@@ -58,6 +58,7 @@ export default function DhcpServersPage() {
   const [editing, setEditing] = useState<net.DHCPServer | null>(null);
   const [saving, setSaving] = useState(false);
   const [restarting, setRestarting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [batching, setBatching] = useState(false);
   const [routePush, setRoutePush] = useState<net.RoutePushMode>('off');
   const [form] = Form.useForm<ServerFormValues>();
@@ -90,6 +91,42 @@ export default function DhcpServersPage() {
       alive = false;
     };
   }, [message]);
+
+  // 服务端列表变化（启用/停用/新增/删除/批量后 reload）即同步刷新「服务端状态」标签，
+  // 避免状态与实际不一致（页面本身不轮询，重启后可点状态旁的刷新按钮）。
+  useEffect(() => {
+    let alive = true;
+    net
+      .getStatus()
+      .then((s) => {
+        if (alive) setStatus(s);
+      })
+      .catch(() => {
+        /* 失败静默，保留上次状态 */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [data]);
+
+  // 手动刷新：重新拉取服务端状态 + 列表 + 路由下发模式（页面不轮询，状态变更后点此即可）。
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const s = await net.getStatus();
+      setStatus(s);
+      reload();
+      try {
+        setRoutePush(await net.getRoutePushMode());
+      } catch {
+        /* 可选，失败静默 */
+      }
+    } catch (e) {
+      message.error(extractErr(e));
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // 客户端按服务接口 / 网关过滤。
   const filtered = useMemo(() => {
@@ -220,6 +257,11 @@ export default function DhcpServersPage() {
     try {
       await net.restartDHCP();
       message.success('DHCP 服务已重启');
+      try {
+        setStatus(await net.getStatus());
+      } catch {
+        /* 状态刷新失败静默 */
+      }
     } catch (e) {
       message.error(extractErr(e));
     } finally {
@@ -316,6 +358,9 @@ export default function DhcpServersPage() {
                   <Tag color="warning">未下发（无启用服务端）</Tag>
                 </Tooltip>
               )}
+              <Tooltip title="刷新服务端状态与列表">
+                <Button size="small" type="text" icon={<ReloadOutlined />} loading={refreshing} onClick={onRefresh} />
+              </Tooltip>
             </Space>
             <Input.Search
               allowClear

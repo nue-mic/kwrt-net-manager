@@ -17,6 +17,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import type { CheckboxChangeEvent } from 'antd/es/checkbox';
 import { PlusOutlined } from '@ant-design/icons';
+import { useSearchParams } from 'react-router-dom';
 import PageCard from '../components/PageCard';
 import { useNetData, extractErr } from '../hooks/useNetData';
 import * as net from '../api/netcfg';
@@ -41,8 +42,10 @@ export default function DhcpStaticsPage() {
   );
   const { data: ifaces } = useNetData<net.NetInterface[]>(() => net.listInterfaces(), []);
 
+  const [searchParams] = useSearchParams();
   const [selected, setSelected] = useState<string[]>([]);
-  const [keyword, setKeyword] = useState('');
+  // 从终端列表「查看」跳转过来时，用 ?q=<ip> 预填搜索，定位到该条静态分配。
+  const [keyword, setKeyword] = useState(searchParams.get('q') ?? '');
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<net.StaticLease | null>(null);
   const [saving, setSaving] = useState(false);

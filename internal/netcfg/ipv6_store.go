@@ -125,10 +125,11 @@ func (b *storeBackend) LinesV6() ([]LineV6, error) {
 	}
 	out := make([]LineV6, 0, len(wans))
 	for i, w := range wans {
+		// 显式 int64 运算：字面量在 32 位架构(386/armv7/mips)的 int 上下文会溢出。
 		out = append(out, LineV6{
 			Line: w.Name, Connections: 1221 - i*37,
 			UpBps: int64(5500 - i*900), DownBps: int64(1800 + i*400),
-			TotalUp: int64(2_600_000_000 - i*1e8), TotalDown: int64(8_400_000_000 - i*2e8),
+			TotalUp: int64(2_600_000_000) - int64(i)*100_000_000, TotalDown: int64(8_400_000_000) - int64(i)*200_000_000,
 		})
 	}
 	return out, nil

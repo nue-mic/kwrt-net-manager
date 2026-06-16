@@ -148,10 +148,11 @@ type Interface struct {
 
 // Status summarizes the network-config service health for the UI header.
 type Status struct {
-	Backend string `json:"backend"` // "uci" | "store"
-	DHCPOK  bool   `json:"dhcp_ok"` // DHCP 服务端状态：服务正常
-	Pending bool   `json:"pending"` // 有已保存未生效（committed 未 reload）的变更
-	Message string `json:"message"`
+	Backend        string `json:"backend"`         // "uci" | "store"
+	DHCPOK         bool   `json:"dhcp_ok"`         // DHCP 基础设施健康：dnsmasq/odhcpd 存在且无 pending
+	EnabledServers int    `json:"enabled_servers"` // 已启用的 DHCP 服务端池数量（0=虽服务在跑但无池下发地址）
+	Pending        bool   `json:"pending"`         // 有已保存未生效（committed 未 reload）的变更
+	Message        string `json:"message"`
 }
 
 // State is the full managed network configuration — the unit of export/import

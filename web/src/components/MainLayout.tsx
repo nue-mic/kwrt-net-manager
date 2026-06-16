@@ -14,6 +14,9 @@ import {
   GlobalOutlined,
   ArrowUpOutlined,
   ArrowDownOutlined,
+  CloudServerOutlined,
+  DashboardOutlined as SpeedIcon,
+  FileSearchOutlined,
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
@@ -186,6 +189,42 @@ const MainLayout: React.FC = () => {
         ],
       },
       {
+        key: 'g-adv',
+        type: 'group',
+        label: '高级应用',
+        children: [
+          { key: '/ddns', icon: <CloudServerOutlined />, label: '动态域名' },
+        ],
+      },
+      {
+        key: 'g-tools',
+        type: 'group',
+        label: '应用工具',
+        children: [
+          { key: '/speedtest', icon: <SpeedIcon />, label: '线路测速' },
+        ],
+      },
+      {
+        key: 'g-logs',
+        type: 'group',
+        label: '日志中心',
+        children: [
+          {
+            key: 'logs',
+            icon: <FileSearchOutlined />,
+            label: '日志中心',
+            children: [
+              { key: '/logs/system', label: '系统日志' },
+              { key: '/logs/operation', label: '操作日志' },
+              { key: '/logs/dhcp', label: 'DHCP日志' },
+              { key: '/logs/dialup', label: '外网拨号日志' },
+              { key: '/logs/ddns', label: '动态域名日志' },
+              { key: '/logs/arp', label: 'ARP日志' },
+            ],
+          },
+        ],
+      },
+      {
         key: 'g-sys',
         type: 'group',
         label: '系统',
@@ -205,6 +244,7 @@ const MainLayout: React.FC = () => {
     if (location.pathname.startsWith('/ipv6')) return ['ipv6'];
     if (location.pathname.startsWith('/dhcp')) return ['dhcp'];
     if (location.pathname.startsWith('/dns')) return ['dns'];
+    if (location.pathname.startsWith('/logs')) return ['logs'];
     if (location.pathname === '/routes' || location.pathname === '/route-table') return ['routes'];
     return [];
   }, [location.pathname]);

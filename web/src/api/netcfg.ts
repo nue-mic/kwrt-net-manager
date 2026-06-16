@@ -100,6 +100,7 @@ export interface NetInterface {
 export interface NetStatus {
   backend: 'uci' | 'store';
   dhcp_ok: boolean;
+  enabled_servers: number;
   pending: boolean;
   message: string;
 }

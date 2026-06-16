@@ -9,14 +9,19 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/mia-clark/kwrt-net-manager/internal/api"
 	"github.com/mia-clark/kwrt-net-manager/internal/appcfg"
 	"github.com/mia-clark/kwrt-net-manager/internal/backup"
+	"github.com/mia-clark/kwrt-net-manager/internal/ddns"
 	"github.com/mia-clark/kwrt-net-manager/internal/eventbus"
+	"github.com/mia-clark/kwrt-net-manager/internal/logcenter"
 	"github.com/mia-clark/kwrt-net-manager/internal/netcfg"
+	"github.com/mia-clark/kwrt-net-manager/internal/pkgmgr"
+	"github.com/mia-clark/kwrt-net-manager/internal/speedtest"
 	"github.com/mia-clark/kwrt-net-manager/internal/store"
 	"github.com/mia-clark/kwrt-net-manager/pkg/version"
 )
@@ -111,6 +116,17 @@ func runServe(args []string) int {
 	nsvc := netcfg.NewService(nbe, bus, logger)
 	logger.Info("netcfg ready", slog.String("backend", nbe.Kind()))
 
+	// 日志中心：系统/DHCP/拨号/DDNS 日志 + 本工具审计 + ARP 差分监控。
+	logs := logcenter.New(cfg.DataDir, logger)
+	arpCtx, arpCancel := context.WithCancel(context.Background())
+	defer arpCancel()
+	logs.StartARPMonitor(arpCtx, 20*time.Second)
+
+	// 动态域名 DDNS（OpenWrt ddns-scripts；旁车 DATA_DIR/ddns.json）。
+	ddnsSvc := ddns.New(pkgmgr.RealRunner{}, filepath.Join(cfg.DataDir, "ddns.json"), nil)
+	// 线路测速（OpenWrt speedtest-go）。
+	speedSvc := speedtest.New(pkgmgr.RealRunner{})
+
 	// Backup payload builder (meta.json + netcfg export).
 	exportSrc := api.NewExportSource(st, nsvc, logger)
 
@@ -128,14 +144,17 @@ func runServe(args []string) int {
 	})
 
 	handler := api.NewRouter(api.Deps{
-		Cfg:      cfg,
-		Logger:   logger,
-		Store:    st,
-		Bus:      bus,
-		LogLevel: levelVar,
-		Backup:   sched,
-		Export:   exportSrc,
-		Net:      nsvc,
+		Cfg:       cfg,
+		Logger:    logger,
+		Store:     st,
+		Bus:       bus,
+		LogLevel:  levelVar,
+		Backup:    sched,
+		Export:    exportSrc,
+		Net:       nsvc,
+		Logs:      logs,
+		DDNS:      ddnsSvc,
+		Speedtest: speedSvc,
 	})
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,

@@ -537,6 +537,132 @@ paths:
       responses:
         "101": { description: Switching Protocols }
 
+  /api/v1/logs/{source}:
+    get:
+      tags: [logs]
+      summary: 日志中心查询（source=system|dhcp|dialup|ddns|operation|arp）
+      parameters:
+        - { name: source, in: path, required: true, schema: { type: string, enum: [system, dhcp, dialup, ddns, operation, arp] } }
+        - { name: start, in: query, schema: { type: integer }, description: unix 秒 }
+        - { name: end, in: query, schema: { type: integer }, description: unix 秒 }
+        - { name: keyword, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: page_size, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  items: { type: array, items: { $ref: "#/components/schemas/LogEntry" } }
+  /api/v1/logs/{source}/export:
+    get:
+      tags: [logs]
+      summary: 导出日志为纯文本（应用当前过滤）
+      parameters:
+        - { name: source, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: 文本下载 }
+  /api/v1/logs/{source}/clear:
+    post:
+      tags: [logs]
+      summary: 清空日志（仅 operation/arp 等本工具自管源）
+      parameters:
+        - { name: source, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: OK }
+
+  /api/v1/ddns:
+    get:
+      tags: [ddns]
+      summary: 动态域名列表（ddns-scripts）
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/DDNSEntry" } }
+    post:
+      tags: [ddns]
+      summary: 新增动态域名
+      requestBody:
+        content: { application/json: { schema: { $ref: "#/components/schemas/DDNSEntry" } } }
+      responses:
+        "200": { description: OK }
+  /api/v1/ddns/batch:
+    post:
+      tags: [ddns]
+      summary: 批量启用/停用/删除
+      responses:
+        "200": { description: OK }
+  /api/v1/ddns/{id}:
+    put:
+      tags: [ddns]
+      summary: 编辑动态域名
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK }
+    delete:
+      tags: [ddns]
+      summary: 删除动态域名
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK }
+  /api/v1/ddns/{id}/toggle:
+    post:
+      tags: [ddns]
+      summary: 启用/停用
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK }
+  /api/v1/ddns/service:
+    get:
+      tags: [ddns]
+      summary: DDNS 组件探测（是否已装 / 支持的服务商）
+      responses:
+        "200": { description: OK }
+  /api/v1/ddns/install:
+    post:
+      tags: [ddns]
+      summary: 一键安装 ddns-scripts（自愈回退源）
+      responses:
+        "200": { description: OK }
+
+  /api/v1/speedtest/status:
+    get:
+      tags: [speedtest]
+      summary: 测速运行态 / 最近结果
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpeedtestStatus" }
+  /api/v1/speedtest/run:
+    post:
+      tags: [speedtest]
+      summary: 起一次线路测速（speedtest-go，异步）
+      responses:
+        "200": { description: OK }
+  /api/v1/speedtest/service:
+    get:
+      tags: [speedtest]
+      summary: 测速组件探测（是否已装 speedtest-go）
+      responses:
+        "200": { description: OK }
+  /api/v1/speedtest/install:
+    post:
+      tags: [speedtest]
+      summary: 一键安装 speedtest-go（自愈回退源）
+      responses:
+        "200": { description: OK }
+
 components:
   securitySchemes:
     BearerAuth:
@@ -580,6 +706,7 @@ components:
       properties:
         backend: { type: string, enum: [uci, store] }
         dhcp_ok: { type: boolean }
+        enabled_servers: { type: integer }
         pending: { type: boolean }
         message: { type: string }
     Interface:
@@ -736,3 +863,51 @@ components:
         doh_installed: { type: boolean }
         pkg_manager: { type: string }
         can_install: { type: boolean }
+    LogEntry:
+      type: object
+      properties:
+        time: { type: string }
+        ts: { type: integer }
+        level: { type: string }
+        proc: { type: string }
+        message: { type: string }
+        type: { type: string }
+        iface: { type: string }
+        mac: { type: string }
+        ip: { type: string }
+        user: { type: string }
+        client_ip: { type: string }
+        module: { type: string }
+        action: { type: string }
+    DDNSEntry:
+      type: object
+      properties:
+        id: { type: string }
+        provider: { type: string }
+        domain: { type: string }
+        auth_mode: { type: string, enum: [token, userpass] }
+        username: { type: string }
+        password: { type: string }
+        ip_source: { type: string, enum: [web, network] }
+        interface: { type: string }
+        record_type: { type: string, enum: [A, AAAA] }
+        enabled: { type: boolean }
+        remark: { type: string }
+        last_result: { type: string }
+        current_ip: { type: string }
+        last_update: { type: string }
+    SpeedtestStatus:
+      type: object
+      properties:
+        running: { type: boolean }
+        error: { type: string }
+        started_at: { type: string }
+        finished_at: { type: string }
+        result:
+          type: object
+          properties:
+            download_mbps: { type: number }
+            upload_mbps: { type: number }
+            ping_ms: { type: number }
+            server: { type: string }
+            isp: { type: string }

@@ -14,6 +14,7 @@ import {
   Switch,
   Table,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -304,10 +305,16 @@ export default function DhcpServersPage() {
           <Space size="middle" wrap>
             <Space size={6}>
               <Typography.Text type="secondary">服务端状态:</Typography.Text>
-              {status?.dhcp_ok ? (
+              {!status?.dhcp_ok ? (
+                <Tooltip title={status?.message || ''}>
+                  <Tag color="error">{status?.message ? '服务异常' : '未就绪'}</Tag>
+                </Tooltip>
+              ) : (status?.enabled_servers ?? 0) > 0 ? (
                 <Tag color="success">服务正常</Tag>
               ) : (
-                <Tag color="warning">{status?.message || '未就绪'}</Tag>
+                <Tooltip title="DHCP/DNS 进程在运行，但没有任何已启用的服务端池，当前不会给客户端下发地址。">
+                  <Tag color="warning">未下发（无启用服务端）</Tag>
+                </Tooltip>
               )}
             </Space>
             <Input.Search

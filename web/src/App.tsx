@@ -23,6 +23,9 @@ const Ipv6Leases = lazy(() => import('./pages/ipv6/Ipv6Leases'));
 const Ipv6PrefixStatic = lazy(() => import('./pages/ipv6/Ipv6PrefixStatic'));
 const Ipv6Acl = lazy(() => import('./pages/ipv6/Ipv6Acl'));
 const Ipv6Neighbors = lazy(() => import('./pages/ipv6/Ipv6Neighbors'));
+const DdnsList = lazy(() => import('./pages/ddns/DdnsList'));
+const Speedtest = lazy(() => import('./pages/tools/Speedtest'));
+const LogCenter = lazy(() => import('./pages/logcenter/LogCenter'));
 const SystemPage = lazy(() => import('./pages/System'));
 const Backup = lazy(() => import('./pages/Backup'));
 const Settings = lazy(() => import('./pages/Settings'));
@@ -75,6 +78,19 @@ function App() {
               <Route path="prefix-static" element={<Ipv6PrefixStatic />} />
               <Route path="acl" element={<Ipv6Acl />} />
               <Route path="neighbors" element={<Ipv6Neighbors />} />
+            </Route>
+
+            <Route path="ddns" element={<DdnsList />} />
+            <Route path="speedtest" element={<Speedtest />} />
+
+            <Route path="logs">
+              <Route index element={<Navigate to="/logs/system" replace />} />
+              <Route path="system" element={<LogCenter source="system" />} />
+              <Route path="operation" element={<LogCenter source="operation" />} />
+              <Route path="dhcp" element={<LogCenter source="dhcp" />} />
+              <Route path="dialup" element={<LogCenter source="dialup" />} />
+              <Route path="ddns" element={<LogCenter source="ddns" />} />
+              <Route path="arp" element={<LogCenter source="arp" />} />
             </Route>
 
             <Route path="system" element={<SystemPage />} />

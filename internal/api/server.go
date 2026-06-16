@@ -11,8 +11,11 @@ import (
 	"github.com/mia-clark/kwrt-net-manager/internal/api/middleware"
 	"github.com/mia-clark/kwrt-net-manager/internal/appcfg"
 	"github.com/mia-clark/kwrt-net-manager/internal/backup"
+	"github.com/mia-clark/kwrt-net-manager/internal/ddns"
 	"github.com/mia-clark/kwrt-net-manager/internal/eventbus"
+	"github.com/mia-clark/kwrt-net-manager/internal/logcenter"
 	"github.com/mia-clark/kwrt-net-manager/internal/netcfg"
+	"github.com/mia-clark/kwrt-net-manager/internal/speedtest"
 	"github.com/mia-clark/kwrt-net-manager/internal/store"
 	"github.com/mia-clark/kwrt-net-manager/web"
 )
@@ -34,6 +37,12 @@ type Deps struct {
 	Export *ExportSource
 	// Net is the network-config service (DHCP + static routing). Must be non-nil.
 	Net *netcfg.Service
+	// Logs is the log center (system/dhcp/operation/arp...). May be nil (tests).
+	Logs *logcenter.Center
+	// DDNS is the dynamic-DNS service (ddns-scripts). May be nil (tests).
+	DDNS *ddns.Service
+	// Speedtest is the line speed-test service (speedtest-go). May be nil (tests).
+	Speedtest *speedtest.Service
 }
 
 // NewRouter assembles the chi mux with all middleware and route groups
@@ -72,6 +81,8 @@ func NewRouter(d Deps) http.Handler {
 	// Authenticated subtree.
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Bearer(d.Cfg.APIToken))
+		// 操作审计：记录鉴权子树里的写操作到「操作日志」。
+		r.Use(auditMiddleware(d.Logs))
 
 		r.Get("/api/v1/version", sys.Version)
 		r.Get("/api/v1/version/check", upd.Check)
@@ -117,6 +128,15 @@ func NewRouter(d Deps) http.Handler {
 
 		// Network-config routes (DHCP + static routing) are registered here.
 		registerNetcfgRoutes(r, d)
+
+		// Log center (系统/DHCP/拨号/DDNS/操作/ARP 日志).
+		registerLogRoutes(r, d.Logs)
+
+		// 动态域名 DDNS（ddns-scripts）.
+		registerDDNSRoutes(r, d.DDNS)
+
+		// 线路测速（speedtest-go）.
+		registerSpeedtestRoutes(r, d.Speedtest)
 	})
 
 	// WebUI 静态文件分发 & SPA 路由兼容

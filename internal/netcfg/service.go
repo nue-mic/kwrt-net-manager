@@ -58,8 +58,22 @@ func (s *Service) publish(t eventbus.EventType, action string, count int) {
 // Interfaces lists the L3 interfaces usable as DHCP/route targets.
 func (s *Service) Interfaces() ([]Interface, error) { return s.be.Interfaces() }
 
-// Status reports backend kind + health.
-func (s *Service) Status() (Status, error) { return s.be.Status() }
+// Status reports backend kind + health. EnabledServers 在此层补齐：dnsmasq 同时提供
+// DNS，故「服务在跑」不等于「DHCP 在下发」——前端据此区分「服务正常」与「已停用（无池下发）」。
+func (s *Service) Status() (Status, error) {
+	st, err := s.be.Status()
+	if err != nil {
+		return st, err
+	}
+	if servers, e := s.be.DHCPServers(); e == nil {
+		for _, sv := range servers {
+			if sv.Enabled {
+				st.EnabledServers++
+			}
+		}
+	}
+	return st, nil
+}
 
 // ================= DHCP servers =================
 

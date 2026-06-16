@@ -388,6 +388,76 @@ func TestUCIARPBindNeigh(t *testing.T) {
 	}
 }
 
+func TestUCIStaticUnsafeHostnameNotProjected(t *testing.T) {
+	// A device named in Chinese (or with spaces/dots) must NOT be written as the
+	// dnsmasq host name — that crashes dnsmasq with "bad DHCP host name". The
+	// reservation (mac+ip) must still be projected; the name is just dropped.
+	f := &fakeRunner{
+		show: map[string]string{"dhcp": "", "network": sampleNetShow},
+		get:  map[string]string{"network.lan.ipaddr": "192.168.1.1", "network.lan.netmask": "255.255.255.0"},
+	}
+	be := newTestUCI(t, f)
+	svc := NewService(be, nil, nil)
+	svc.idFn = func(p string) string { return p + "_h" }
+	if _, err := svc.CreateStatic(StaticLease{
+		Hostname: "IP14-慕容-5G", IP: "192.168.1.104", MAC: "16:cd:03:ca:2b:30", Interface: "lan", Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	dhcp := f.batchContaining("commit dhcp")
+	if !strings.Contains(dhcp, "set dhcp.host_h.ip='192.168.1.104'") {
+		t.Errorf("reservation IP must still project\n%s", dhcp)
+	}
+	if strings.Contains(dhcp, "慕容") || strings.Contains(dhcp, "set dhcp.host_h.name=") {
+		t.Errorf("unsafe hostname must NOT be projected to dnsmasq\n%s", dhcp)
+	}
+	if !strings.Contains(dhcp, "delete dhcp.host_h.name") {
+		t.Errorf("unsafe hostname should delete the name option\n%s", dhcp)
+	}
+}
+
+func TestDNSSafeHostname(t *testing.T) {
+	cases := map[string]string{
+		"laptop-1": "laptop-1", "my_pc": "my_pc", "ABC123": "ABC123",
+		"IP14-慕容-5G": "", "测试机": "", "a b": "", "host.local": "",
+		"-bad": "", "bad-": "", "": "",
+	}
+	for in, want := range cases {
+		if got := dnsSafeHostname(in); got != want {
+			t.Errorf("dnsSafeHostname(%q) = %q want %q", in, got, want)
+		}
+	}
+}
+
+func TestUCIPoolForceProjection(t *testing.T) {
+	// Force on → set force='1' (skip dnsmasq's dhcp_check "another server" probe);
+	// off → delete force.
+	f := &fakeRunner{
+		show: map[string]string{"dhcp": "", "network": sampleNetShow},
+		get:  map[string]string{"network.lan.ipaddr": "192.168.1.1", "network.lan.netmask": "255.255.255.0"},
+	}
+	be := newTestUCI(t, f)
+	svc := NewService(be, nil, nil)
+	svc.idFn = func(p string) string { return p + "_f" }
+	srv, err := svc.CreateDHCPServer(DHCPServer{
+		Interface: "lan", Enabled: true, Force: true,
+		IPStart: "192.168.1.100", IPEnd: "192.168.1.150", LeaseMinutes: 120,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dhcp := f.batchContaining("commit dhcp"); !strings.Contains(dhcp, "set dhcp.dhcp_f.force='1'") {
+		t.Errorf("force on must set force='1'\n%s", dhcp)
+	}
+	srv.Force = false
+	if _, err := svc.UpdateDHCPServer(srv.ID, srv); err != nil {
+		t.Fatal(err)
+	}
+	if dhcp := f.batchContaining("commit dhcp"); !strings.Contains(dhcp, "delete dhcp.dhcp_f.force") {
+		t.Errorf("force off must delete force\n%s", dhcp)
+	}
+}
+
 func TestUCIPoolRejectsOutOfSubnetRange(t *testing.T) {
 	// The Service must reject a pool range outside the bound interface subnet
 	// (the old silent &0xFF truncation bug) with a clear error.

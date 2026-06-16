@@ -589,6 +589,7 @@ components:
         enabled: { type: boolean }
         ip_start: { type: string }
         ip_end: { type: string }
+        force: { type: boolean }
         netmask: { type: string }
         gateway: { type: string }
         dns_primary: { type: string }

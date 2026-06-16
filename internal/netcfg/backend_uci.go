@@ -170,6 +170,13 @@ func (b *uciBackend) apply() error {
 		fmt.Fprintf(&d, "set dhcp.%s.start='%d'\n", id, start)
 		fmt.Fprintf(&d, "set dhcp.%s.limit='%d'\n", id, limit)
 		fmt.Fprintf(&d, "set dhcp.%s.leasetime='%dm'\n", id, s.LeaseMinutes)
+		// 强制下发：force='1' 跳过 dnsmasq init 的"本网段已有 DHCP 服务器则礼让退出"探测
+		// （dhcp_check）。旁路由/同网段多 DHCP 场景必备，否则探测命中后整段不发地址。
+		if s.Force {
+			fmt.Fprintf(&d, "set dhcp.%s.force='1'\n", id)
+		} else {
+			fmt.Fprintf(&d, "delete dhcp.%s.force\n", id)
+		}
 		if s.Enabled {
 			fmt.Fprintf(&d, "delete dhcp.%s.ignore\n", id)
 			// Make the pool actually serve DHCPv4: dhcpv4='server' is required by
@@ -221,8 +228,10 @@ func (b *uciBackend) apply() error {
 		fmt.Fprintf(&d, "set dhcp.%s.%s='%s'\n", id, managedOpt, managedMarker)
 		fmt.Fprintf(&d, "set dhcp.%s.mac='%s'\n", id, s.MAC)
 		fmt.Fprintf(&d, "set dhcp.%s.ip='%s'\n", id, s.IP)
-		if s.Hostname != "" {
-			fmt.Fprintf(&d, "set dhcp.%s.name='%s'\n", id, s.Hostname)
+		// 仅把 DNS 合法的主机名下发给 dnsmasq；含中文/空格等非法字符的名字会让 dnsmasq
+		// 报 "bad DHCP host name" 整体崩溃。原始名仍保留在旁车里供前端展示，绑定(mac+ip)不受影响。
+		if h := dnsSafeHostname(s.Hostname); h != "" {
+			fmt.Fprintf(&d, "set dhcp.%s.name='%s'\n", id, h)
 		} else {
 			fmt.Fprintf(&d, "delete dhcp.%s.name\n", id)
 		}
@@ -403,6 +412,7 @@ func (b *uciBackend) importExisting() error {
 				srv := DHCPServer{
 					ID: s.name, Interface: iface,
 					Enabled:      first(s.opts["ignore"]) != "1",
+					Force:        first(s.opts["force"]) == "1",
 					LeaseMinutes: leasetimeToMin(first(s.opts["leasetime"])),
 					Exclude:      []string{}, CustomOptions: []CustomOption{},
 				}
@@ -541,6 +551,27 @@ func (b *uciBackend) applyARP(statics []StaticLease, on bool) {
 			_, _ = b.run.Run("", "ip", "neigh", "del", s.IP, "dev", dev)
 		}
 	}
+}
+
+// dnsSafeHostname returns name if it is a valid DNS host label (so dnsmasq won't
+// reject it with "bad DHCP host name" and crash-loop), else "". dnsmasq allows
+// alphanumerics plus '-'/'_' (not at either end); anything else — Chinese chars,
+// spaces, dots — is rejected. The original name still lives in the sidecar for UI.
+func dnsSafeHostname(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || len(name) > 63 {
+		return ""
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		switch {
+		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9':
+		case (c == '-' || c == '_') && i != 0 && i != len(name)-1:
+		default:
+			return ""
+		}
+	}
+	return name
 }
 
 // hostTagOptions returns the per-host dhcp_option values (option 3 gateway,

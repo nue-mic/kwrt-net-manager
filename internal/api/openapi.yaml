@@ -160,6 +160,21 @@ paths:
       responses:
         "200": { description: OK }
 
+  /api/v1/dhcp/route-push:
+    put:
+      tags: [dhcp-server]
+      summary: 设置"静态路由下发到客户端"模式（off|all|tagged）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mode: { type: string, enum: [off, all, tagged] }
+      responses:
+        "200": { description: OK }
+
   /api/v1/dhcp/statics:
     get:
       tags: [dhcp-static]
@@ -615,6 +630,7 @@ components:
         dns_secondary: { type: string }
         remark: { type: string }
         enabled: { type: boolean }
+        route_push: { type: boolean }
     Lease:
       type: object
       properties:
@@ -653,6 +669,7 @@ components:
         metric: { type: integer }
         remark: { type: string }
         enabled: { type: boolean }
+        push_to_clients: { type: boolean }
     RouteEntry:
       type: object
       properties:

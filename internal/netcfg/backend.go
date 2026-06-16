@@ -42,6 +42,10 @@ type Backend interface {
 	Routes() ([]Route, error)
 	SaveRoutes([]Route) error
 
+	// Global "push static routes to DHCP clients" mode: "off" | "all" | "tagged".
+	RoutePushMode() (string, error)
+	SaveRoutePushMode(mode string) error
+
 	// Live kernel routing table for family "ipv4" | "ipv6" (read-only).
 	RouteTable(family string) ([]RouteEntry, error)
 

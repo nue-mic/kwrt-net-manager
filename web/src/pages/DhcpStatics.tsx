@@ -9,6 +9,7 @@ import {
   Popconfirm,
   Select,
   Space,
+  Switch,
   Table,
   Tag,
   Typography,
@@ -29,6 +30,7 @@ interface StaticForm {
   dns_primary: string;
   dns_secondary: string;
   remark: string;
+  route_push: boolean;
 }
 
 export default function DhcpStaticsPage() {
@@ -81,6 +83,7 @@ export default function DhcpStaticsPage() {
         dns_primary: record.dns_primary,
         dns_secondary: record.dns_secondary,
         remark: record.remark,
+        route_push: record.route_push,
       });
     } else {
       form.resetFields();
@@ -104,6 +107,7 @@ export default function DhcpStaticsPage() {
       dns_primary: v.dns_primary ?? '',
       dns_secondary: v.dns_secondary ?? '',
       remark: v.remark ?? '',
+      route_push: !!v.route_push,
       enabled: editing ? editing.enabled : true,
     };
     setSaving(true);
@@ -163,6 +167,12 @@ export default function DhcpStaticsPage() {
     { title: '首选DNS', dataIndex: 'dns_primary', render: (v: string) => v || '-' },
     { title: '备选DNS', dataIndex: 'dns_secondary', render: (v: string) => v || '-' },
     { title: '备注', dataIndex: 'remark', ellipsis: true, render: (v: string) => v || '-' },
+    {
+      title: '跟随路由推送',
+      dataIndex: 'route_push',
+      width: 110,
+      render: (v: boolean) => (v ? <Tag color="blue">是</Tag> : <Tag>-</Tag>),
+    },
     {
       title: '状态',
       dataIndex: 'enabled',
@@ -287,6 +297,14 @@ export default function DhcpStaticsPage() {
           </Form.Item>
           <Form.Item name="remark" label="备注">
             <Input placeholder="可空" allowClear />
+          </Form.Item>
+          <Form.Item
+            name="route_push"
+            label="跟随路由推送"
+            valuePropName="checked"
+            extra="仅当「DHCP 服务端」页的『路由下发』总开关为『仅指定设备』时生效：勾选后，已标记推送的静态路由只下发给这台设备。"
+          >
+            <Switch />
           </Form.Item>
         </Form>
       </Drawer>

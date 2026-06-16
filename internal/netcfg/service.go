@@ -685,6 +685,34 @@ func (s *Service) ToggleACLEntry(id string) (ACLEntry, error) {
 // ListRoutes returns all static routes.
 func (s *Service) ListRoutes() ([]Route, error) { return s.be.Routes() }
 
+// GetRoutePushMode returns the global "push static routes to DHCP clients" mode.
+func (s *Service) GetRoutePushMode() (string, error) {
+	m, err := s.be.RoutePushMode()
+	if err != nil {
+		return "", err
+	}
+	if m == "" {
+		m = RoutePushOff
+	}
+	return m, nil
+}
+
+// SetRoutePushMode sets the global push mode ("off" | "all" | "tagged").
+func (s *Service) SetRoutePushMode(mode string) error {
+	switch mode {
+	case RoutePushOff, RoutePushAll, RoutePushTagged:
+	default:
+		return errors.New("路由下发模式必须是 off / all / tagged")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.be.SaveRoutePushMode(mode); err != nil {
+		return err
+	}
+	s.publish(eventbus.TypeRouteChanged, "update", 0)
+	return nil
+}
+
 // GetRoute returns one route by id.
 func (s *Service) GetRoute(id string) (Route, error) {
 	list, err := s.be.Routes()

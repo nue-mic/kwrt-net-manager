@@ -93,6 +93,13 @@ func (b *uciBackend) SaveRoutes(list []Route) error {
 	return b.apply()
 }
 
+func (b *uciBackend) SaveRoutePushMode(mode string) error {
+	if err := b.storeBackend.SaveRoutePushMode(mode); err != nil {
+		return err
+	}
+	return b.apply()
+}
+
 // ---- DHCP service detection (dnsmasq | odhcpd | none) ----
 
 func initdExists(name string) bool {
@@ -151,6 +158,17 @@ func (b *uciBackend) apply() error {
 	arpBind, _ := b.ARPBind()
 	whitelist := acl.Mode == ACLWhitelist
 
+	// 路由下发到客户端（DHCP option 121/249）：收集"启用+托管+IPv4+已勾选推送"的路由。
+	routePushMode, _ := b.RoutePushMode()
+	var pushRoutes []Route
+	if routePushMode == RoutePushAll || routePushMode == RoutePushTagged {
+		for _, r := range routes {
+			if r.Enabled && r.Managed && r.Family == FamilyIPv4 && r.PushToClients {
+				pushRoutes = append(pushRoutes, r)
+			}
+		}
+	}
+
 	existDhcp := b.managedNames("dhcp")
 	existNet := b.managedNames("network")
 
@@ -199,6 +217,15 @@ func (b *uciBackend) apply() error {
 		for _, o := range s.CustomOptions {
 			fmt.Fprintf(&d, "add_list dhcp.%s.dhcp_option='%d,%s'\n", id, o.Code, o.Value)
 		}
+		// 路由下发（全员模式）：把已勾选推送的静态路由经 option 121/249 发给本池所有客户端。
+		// 值自动带上默认路由(via 本池网关=主路由)，否则认 121 的客户端会丢默认网关而断网；
+		// 明细路由的下一跳=本旁路由在该接口的 IP（让客户端把该网段流量先送到旁路由再转发）。
+		if routePushMode == RoutePushAll {
+			if v := buildClasslessValue(s.Gateway, b.ifaceIP(s.Interface), pushRoutes); v != "" {
+				fmt.Fprintf(&d, "add_list dhcp.%s.dhcp_option='121,%s'\n", id, v)
+				fmt.Fprintf(&d, "add_list dhcp.%s.dhcp_option='249,%s'\n", id, v) // 249 = 旧版 Windows 兼容
+			}
+		}
 		// 白名单模式 = 仅服务已知/静态主机：dnsmasq `dhcp-range=...,static`（option dynamicdhcp '0'）。
 		if whitelist {
 			fmt.Fprintf(&d, "set dhcp.%s.dynamicdhcp='0'\n", id)
@@ -237,7 +264,16 @@ func (b *uciBackend) apply() error {
 		}
 		// 每条静态分配的网关/DNS：OpenWrt 的 config host 没有 option 3/6，原生经 dnsmasq tag
 		// 下发——建一个具名 `config tag` 承载 option 3/6，再把该 host 打上同名 tag。
-		if opts := hostTagOptions(s); len(opts) > 0 {
+		// tagged 模式下，若本设备勾选了"跟随推送"，再往同一 tag 追加 option 121/249（只发给它）。
+		opts := hostTagOptions(s)
+		if routePushMode == RoutePushTagged && s.RoutePush {
+			if pool, ok := poolForInterface(servers, s.Interface); ok {
+				if v := buildClasslessValue(pool.Gateway, b.ifaceIP(pool.Interface), pushRoutes); v != "" {
+					opts = append(opts, "121,"+v, "249,"+v)
+				}
+			}
+		}
+		if len(opts) > 0 {
 			tagid := id + "_t"
 			keepDhcp[tagid] = true
 			fmt.Fprintf(&d, "set dhcp.%s=tag\n", tagid)
@@ -572,6 +608,40 @@ func dnsSafeHostname(name string) string {
 		}
 	}
 	return name
+}
+
+// buildClasslessValue builds the dnsmasq option 121/249 value (classless static
+// routes): the default route via gw (so 121-honoring clients keep internet —
+// RFC 3442 makes them ignore option 3) plus each pushed route via nextHop (the
+// bypass router's interface IP). Returns "" if it can't form a safe value.
+func buildClasslessValue(gw, nextHop string, routes []Route) string {
+	if gw == "" || nextHop == "" || len(routes) == 0 {
+		return ""
+	}
+	parts := []string{"0.0.0.0/0", gw}
+	for _, r := range routes {
+		parts = append(parts, fmt.Sprintf("%s/%d", r.Target, r.Prefix), nextHop)
+	}
+	return strings.Join(parts, ",")
+}
+
+// poolForInterface picks the managed+enabled DHCP pool to source the default
+// gateway + next-hop for a tagged host: an exact interface match first, else the
+// first enabled managed pool (the common single-LAN case).
+func poolForInterface(servers []DHCPServer, iface string) (DHCPServer, bool) {
+	if iface != "" {
+		for _, s := range servers {
+			if s.Managed && s.Enabled && s.Interface == iface {
+				return s, true
+			}
+		}
+	}
+	for _, s := range servers {
+		if s.Managed && s.Enabled {
+			return s, true
+		}
+	}
+	return DHCPServer{}, false
 }
 
 // hostTagOptions returns the per-host dhcp_option values (option 3 gateway,

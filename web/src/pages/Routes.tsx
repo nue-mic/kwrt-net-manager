@@ -9,6 +9,7 @@ import {
   Popconfirm,
   Select,
   Space,
+  Switch,
   Table,
   Tag,
   Typography,
@@ -28,6 +29,7 @@ interface RouteForm {
   gateway: string;
   metric: number;
   remark: string;
+  push_to_clients: boolean;
 }
 
 const DEFAULTS: RouteForm = {
@@ -39,6 +41,7 @@ const DEFAULTS: RouteForm = {
   gateway: '',
   metric: 1,
   remark: '',
+  push_to_clients: false,
 };
 
 export default function RoutesPage() {
@@ -63,6 +66,7 @@ export default function RoutesPage() {
         gateway: record.gateway,
         metric: record.metric,
         remark: record.remark,
+        push_to_clients: record.push_to_clients,
       });
     } else {
       setEditing(null);
@@ -84,6 +88,7 @@ export default function RoutesPage() {
         enabled: editing ? editing.enabled : true,
         netmask: v.family === 'ipv4' ? v.netmask : '',
         prefix: v.family === 'ipv4' ? 0 : v.prefix,
+        push_to_clients: v.family === 'ipv4' ? !!v.push_to_clients : false,
       };
       if (editing) {
         await net.updateRoute(editing.id, body);
@@ -155,6 +160,12 @@ export default function RoutesPage() {
     },
     { title: '网关', dataIndex: 'gateway', render: (v: string) => v || '-' },
     { title: '优先级', dataIndex: 'metric' },
+    {
+      title: '下发客户端',
+      dataIndex: 'push_to_clients',
+      render: (v: boolean, r: net.Route) =>
+        r.family === 'ipv4' && v ? <Tag color="blue">已推送</Tag> : <Tag>-</Tag>,
+    },
     { title: '备注', dataIndex: 'remark', render: (v: string) => v || '-' },
     {
       title: '状态',
@@ -272,6 +283,16 @@ export default function RoutesPage() {
           <Form.Item label="备注" name="remark">
             <Input />
           </Form.Item>
+          {family !== 'ipv6' && (
+            <Form.Item
+              label="下发给客户端 (DHCP 选项 121)"
+              name="push_to_clients"
+              valuePropName="checked"
+              extra="勾选后，本路由会经 DHCP 推送给客户端，让网关指向主路由的设备也把该网段流量引到本旁路由。需在「DHCP 服务端」页把『路由下发』总开关设为 全部客户端 / 仅指定设备 才生效。"
+            >
+              <Switch />
+            </Form.Item>
+          )}
         </Form>
       </Drawer>
     </PageCard>

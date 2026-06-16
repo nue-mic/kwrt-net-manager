@@ -475,6 +475,83 @@ func TestUCIPoolRejectsOutOfSubnetRange(t *testing.T) {
 	}
 }
 
+func TestUCIRoutePushAllPoolLevel(t *testing.T) {
+	// "all" mode: pushed IPv4 routes go to every pool client via option 121/249,
+	// auto-including the default route (via pool gateway) and next-hop = bypass IP.
+	f := &fakeRunner{
+		show: map[string]string{"dhcp": "", "network": sampleNetShow},
+		get:  map[string]string{"network.lan.ipaddr": "192.168.1.12", "network.lan.netmask": "255.255.255.0"},
+	}
+	be := newTestUCI(t, f)
+	svc := NewService(be, nil, nil)
+	svc.idFn = func(p string) string { return p + "_rp" }
+	if _, err := svc.CreateDHCPServer(DHCPServer{
+		Interface: "lan", Enabled: true, IPStart: "192.168.1.100", IPEnd: "192.168.1.150",
+		Gateway: "192.168.1.1", LeaseMinutes: 120,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CreateRoute(Route{
+		Family: "ipv4", Interface: "auto", Target: "10.8.8.0", Netmask: "255.255.255.0",
+		Gateway: "192.168.1.254", Metric: 1, Enabled: true, PushToClients: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SetRoutePushMode(RoutePushAll); err != nil {
+		t.Fatal(err)
+	}
+	dhcp := f.batchContaining("commit dhcp")
+	want := "add_list dhcp.dhcp_rp.dhcp_option='121,0.0.0.0/0,192.168.1.1,10.8.8.0/24,192.168.1.12'"
+	if !strings.Contains(dhcp, want) {
+		t.Errorf("missing pool-level 121\nwant: %s\n--- batch ---\n%s", want, dhcp)
+	}
+	if !strings.Contains(dhcp, "dhcp.dhcp_rp.dhcp_option='249,0.0.0.0/0,192.168.1.1,10.8.8.0/24,192.168.1.12'") {
+		t.Errorf("missing 249 compat option\n%s", dhcp)
+	}
+}
+
+func TestUCIRoutePushTaggedHostLevel(t *testing.T) {
+	// "tagged" mode: pushed routes go ONLY to reserved devices with RoutePush, via
+	// the host's tag; pools do NOT push to everyone.
+	f := &fakeRunner{
+		show: map[string]string{"dhcp": "", "network": sampleNetShow},
+		get:  map[string]string{"network.lan.ipaddr": "192.168.1.12", "network.lan.netmask": "255.255.255.0", "network.lan.device": "br-lan"},
+	}
+	be := newTestUCI(t, f)
+	svc := NewService(be, nil, nil)
+	svc.idFn = func(p string) string { return p + "_t1" }
+	if _, err := svc.CreateDHCPServer(DHCPServer{
+		Interface: "lan", Enabled: true, IPStart: "192.168.1.100", IPEnd: "192.168.1.150",
+		Gateway: "192.168.1.1", LeaseMinutes: 120,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CreateRoute(Route{
+		Family: "ipv4", Interface: "auto", Target: "10.8.8.0", Netmask: "255.255.255.0",
+		Gateway: "192.168.1.254", Metric: 1, Enabled: true, PushToClients: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CreateStatic(StaticLease{
+		IP: "192.168.1.77", MAC: "16:cd:03:ca:2b:31", Interface: "lan", Enabled: true, RoutePush: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SetRoutePushMode(RoutePushTagged); err != nil {
+		t.Fatal(err)
+	}
+	dhcp := f.batchContaining("commit dhcp")
+	if !strings.Contains(dhcp, "dhcp.host_t1_t.dhcp_option='121,0.0.0.0/0,192.168.1.1,10.8.8.0/24,192.168.1.12'") {
+		t.Errorf("tagged host missing 121\n--- batch ---\n%s", dhcp)
+	}
+	if !strings.Contains(dhcp, "set dhcp.host_t1.tag='host_t1_t'") {
+		t.Errorf("host not pointed at its tag\n%s", dhcp)
+	}
+	if strings.Contains(dhcp, "dhcp.dhcp_t1.dhcp_option='121,") {
+		t.Errorf("pool must NOT push to everyone in tagged mode\n%s", dhcp)
+	}
+}
+
 func TestLeasetimeToMin(t *testing.T) {
 	cases := map[string]int{"12h": 720, "120m": 120, "1d": 1440, "infinite": 0, "": 0, "30s": 1, "3600": 60}
 	for in, want := range cases {

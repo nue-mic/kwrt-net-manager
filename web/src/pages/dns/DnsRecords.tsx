@@ -167,7 +167,7 @@ export default function DnsRecordsPage() {
       />
       <Drawer
         title={editing ? '编辑自定义解析' : '添加自定义解析'}
-        width={480}
+        width="min(92vw, 580px)"
         open={open}
         onClose={() => setOpen(false)}
         destroyOnClose

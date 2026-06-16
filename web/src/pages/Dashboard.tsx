@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  Card, Col, Row, Statistic, Tag, Typography, Space, Button, Empty, Progress, Table, Drawer,
+  Card, Col, Row, Statistic, Tag, Typography, Space, Button, Empty, Progress, Table, Drawer, Segmented, Input,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -170,6 +170,9 @@ export default function Dashboard() {
   const [status, setStatus] = useState<net.NetStatus | null>(null);
   const [connOpen, setConnOpen] = useState(false);
   const [flows, setFlows] = useState<FlowResult>({ flows: [], total: 0, acct_available: false });
+  const [flowProto, setFlowProto] = useState<string>('all');
+  const [flowFamily, setFlowFamily] = useState<string>('all');
+  const [flowKw, setFlowKw] = useState('');
   const { nics, ov, leases, sys, conns, rates, total, series, ts } = useDashboard();
   const counts = useCounts();
 
@@ -189,6 +192,33 @@ export default function Dashboard() {
     const id = setInterval(tick, 3000);
     return () => { alive = false; clearInterval(id); };
   }, [connOpen]);
+
+  // 内网 IP→主机名（取自 DHCP 租约，零外网 PTR 请求；外网 IP 不反查）。
+  const leaseMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const l of leases) if (l.ip && l.hostname) m.set(l.ip, l.hostname);
+    return m;
+  }, [leases]);
+  const ipOf = (addr: string): string => {
+    if (addr.startsWith('[')) return addr.slice(1, addr.indexOf(']')); // [ipv6]:port
+    const i = addr.lastIndexOf(':');
+    return i > 0 && addr.indexOf(':') === i ? addr.slice(0, i) : addr; // 仅 IPv4 ip:port 切端口
+  };
+  const protoCat = (p: string) => (p === 'icmpv6' ? 'icmp' : ['tcp', 'udp', 'icmp'].includes(p) ? p : 'other');
+  const flowCounts = useMemo(() => {
+    const c: Record<string, number> = { tcp: 0, udp: 0, icmp: 0, other: 0 };
+    for (const f of flows.flows) c[protoCat(f.proto)]++;
+    return c;
+  }, [flows]);
+  const filteredFlows = useMemo(() => {
+    const kw = flowKw.trim().toLowerCase();
+    return flows.flows.filter((f) => {
+      if (flowProto !== 'all' && protoCat(f.proto) !== flowProto) return false;
+      if (flowFamily !== 'all' && f.family !== flowFamily) return false;
+      if (kw && !`${f.src} ${f.dst}`.toLowerCase().includes(kw)) return false;
+      return true;
+    });
+  }, [flows, flowProto, flowFamily, flowKw]);
 
   const online = ov.wan_up > 0 || ov.lan_up > 0;
   const wanIPs = useMemo(
@@ -392,7 +422,7 @@ export default function Dashboard() {
       </Row>
 
       {/* 连接详情抽屉：逐条 conntrack 明细（仿爱快），按流量降序 */}
-      <Drawer title={`连接详情（conntrack 共 ${flows.total} 条）`} width={820} open={connOpen} onClose={() => setConnOpen(false)}>
+      <Drawer title={`连接详情（conntrack 共 ${flows.total} 条）`} width="min(92vw, 1040px)" open={connOpen} onClose={() => setConnOpen(false)}>
         <Row gutter={8} style={{ marginBottom: 12 }}>
           <Col span={8}><Card size="small"><Statistic title="TCP" value={conns.tcp} valueStyle={{ fontSize: 20 }} /></Card></Col>
           <Col span={8}><Card size="small"><Statistic title="UDP" value={conns.udp} valueStyle={{ fontSize: 20 }} /></Card></Col>
@@ -403,31 +433,61 @@ export default function Dashboard() {
             <Tag key={k} color={k === 'ESTABLISHED' ? 'success' : k === 'LISTEN' ? 'blue' : 'default'}>{k} {v}</Tag>
           ))}
         </Space>
+        {/* 过滤：协议（含分类计数）/ 网络 / 源·目标关键字 */}
+        <Space wrap style={{ marginBottom: 12 }}>
+          <Segmented
+            value={flowProto}
+            onChange={(v) => setFlowProto(v as string)}
+            options={[
+              { label: `全部 ${flows.flows.length}`, value: 'all' },
+              { label: `TCP ${flowCounts.tcp}`, value: 'tcp' },
+              { label: `UDP ${flowCounts.udp}`, value: 'udp' },
+              { label: `ICMP ${flowCounts.icmp}`, value: 'icmp' },
+              { label: `其它 ${flowCounts.other}`, value: 'other' },
+            ]}
+          />
+          <Segmented
+            value={flowFamily}
+            onChange={(v) => setFlowFamily(v as string)}
+            options={[{ label: '全部', value: 'all' }, { label: 'IPv4', value: 'ipv4' }, { label: 'IPv6', value: 'ipv6' }]}
+          />
+          <Input.Search allowClear placeholder="搜索 源/目标 IP" style={{ width: 200 }} value={flowKw} onChange={(e) => setFlowKw(e.target.value)} />
+        </Space>
         {!flows.acct_available && flows.flows.length > 0 && (
           <Typography.Paragraph type="warning" style={{ fontSize: 12 }}>
-            未开启 conntrack 流量计数（nf_conntrack_acct），故「传输」为 0；如需按流量统计，可在系统里执行 sysctl net.netfilter.nf_conntrack_acct=1。
+            未开启 conntrack 流量计数（nf_conntrack_acct），故「传输」为 0；如需按流量统计，可执行 sysctl net.netfilter.nf_conntrack_acct=1。
           </Typography.Paragraph>
         )}
         <Table<ConnFlow>
           rowKey={(r) => `${r.proto}-${r.src}-${r.dst}`}
           size="small"
-          dataSource={flows.flows}
-          pagination={{ pageSize: 20, showTotal: (t) => `前 ${t} 条（按流量）` }}
+          dataSource={filteredFlows}
+          pagination={{ pageSize: 20, showTotal: (t) => `共 ${t} 条（按流量降序）` }}
           scroll={{ x: 'max-content' }}
           locale={{ emptyText: '暂无连接（或本机无 conntrack）' }}
           columns={[
             { title: '网络', dataIndex: 'family', width: 70, render: (v: string) => <Tag color={v === 'ipv6' ? 'purple' : 'geekblue'}>{v === 'ipv6' ? 'IPv6' : 'IPv4'}</Tag> },
             { title: '协议', dataIndex: 'proto', width: 70, render: (v: string) => <Tag>{(v || '-').toUpperCase()}</Tag> },
-            { title: '源地址', dataIndex: 'src', render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</span> },
-            { title: '目标', dataIndex: 'dst', render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</span> },
+            { title: '源地址', dataIndex: 'src', render: (v: string) => <FlowAddr addr={v} name={leaseMap.get(ipOf(v))} /> },
+            { title: '目标', dataIndex: 'dst', render: (v: string) => <FlowAddr addr={v} name={leaseMap.get(ipOf(v))} /> },
             { title: '传输', dataIndex: 'bytes', width: 150, render: (b: number, r) => <span>{fmtBytes(b)} <Text type="secondary" style={{ fontSize: 12 }}>({r.packets} 包)</Text></span> },
           ]}
         />
         <Typography.Paragraph type="secondary" style={{ marginTop: 12, fontSize: 12 }}>
-          数据来自内核 conntrack（/proc/net/nf_conntrack），每 3 秒刷新，按流量降序取前 100 条。
+          数据来自内核 conntrack（/proc/net/nf_conntrack），每 3 秒刷新，按流量降序取前 100 条；内网设备已用 DHCP 租约名标注。
         </Typography.Paragraph>
       </Drawer>
     </PageCard>
+  );
+}
+
+// FlowAddr 渲染连接端点：IP[:port] + 命中内网租约时附主机名标签。
+function FlowAddr({ addr, name }: { addr: string; name?: string }) {
+  return (
+    <span style={{ fontFamily: 'monospace', fontSize: 12 }}>
+      {addr}
+      {name ? <Tag color="cyan" style={{ marginInlineStart: 6 }}>{name}</Tag> : null}
+    </span>
   );
 }
 

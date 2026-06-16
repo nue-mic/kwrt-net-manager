@@ -260,9 +260,10 @@ export default function RoutesPage() {
 
       <Drawer
         title={editing ? '编辑' : '添加'}
-        width={520}
+        width="min(92vw, 640px)"
         open={open}
         onClose={() => setOpen(false)}
+        destroyOnClose
         extra={
           <Space>
             <Button onClick={() => setOpen(false)}>取消</Button>

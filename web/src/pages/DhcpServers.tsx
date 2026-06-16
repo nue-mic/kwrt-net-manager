@@ -443,7 +443,7 @@ export default function DhcpServersPage() {
 
       <Drawer
         title={editing ? '编辑' : '添加'}
-        width={520}
+        width="min(92vw, 680px)"
         open={open}
         onClose={() => setOpen(false)}
         destroyOnClose

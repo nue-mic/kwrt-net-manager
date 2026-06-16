@@ -209,7 +209,7 @@ export default function Ipv6Acl() {
       />
       <Drawer
         title={editing ? '编辑接入控制条目' : '添加接入控制条目'}
-        width={520}
+        width="min(92vw, 600px)"
         open={open}
         onClose={() => setOpen(false)}
         destroyOnClose

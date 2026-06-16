@@ -58,7 +58,7 @@ import { useEventSubscription } from '../events/EventStreamContext';
 
 const { Title, Text, Paragraph } = Typography;
 
-const DEFAULT_TEMPLATE = 'frpcmgr-backups/{schedule}/{year}/{month}/frpcmgr-{date}-{time}.zip';
+const DEFAULT_TEMPLATE = 'kwrtmgr-backups/{schedule}/{year}/{month}/kwrtmgr-{date}-{time}.zip';
 
 const CRON_PRESETS: { label: string; value: string }[] = [
   { label: '每天 03:00', value: '0 3 * * *' },
@@ -380,7 +380,7 @@ const Backup: React.FC = () => {
       const url = window.URL.createObjectURL(new Blob([blob]));
       const a = document.createElement('a');
       a.href = url;
-      a.download = obj.key.split('/').pop() || 'frpcmgr-backup.zip';
+      a.download = obj.key.split('/').pop() || 'kwrtmgr-backup.zip';
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -428,7 +428,7 @@ const Backup: React.FC = () => {
             将下载并恢复：<Text code>{obj.key}</Text>
           </Paragraph>
           <Paragraph type="warning" style={{ marginBottom: 0 }}>
-            这会<strong>覆盖同名的 FRPC 实例配置</strong>，并恢复品牌 / 系统设置 / 备份渠道与计划；
+            这会<strong>覆盖同名的网络配置</strong>，并恢复品牌 / 系统设置 / 备份渠道与计划；
             备份中不包含的实例不受影响。建议恢复前先做一次当前配置的导出。
           </Paragraph>
         </div>
@@ -444,7 +444,7 @@ const Backup: React.FC = () => {
           if (r.branding_restored) parts.push('品牌');
           if (r.system_config_restored) parts.push('系统设置');
           if (r.backup_restored) parts.push('备份渠道/计划');
-          message.success(parts.join('，') + '。可到「FRPC 实例」查看');
+          message.success(parts.join('，') + '。可到对应配置页查看');
           // 备份渠道/计划可能已变，刷新本页数据。
           await Promise.all([reloadChannels(), reloadSchedules(), reloadRuns()]);
         } catch (e) {
@@ -726,7 +726,7 @@ const Backup: React.FC = () => {
         title={chModal.editing ? '编辑存储渠道' : '新增存储渠道'}
         open={chModal.open}
         onCancel={() => setChModal({ open: false })}
-        width={560}
+        width="min(92vw, 640px)"
         footer={[
           <Button key="test" icon={<ExperimentOutlined />} loading={chTesting} onClick={onTestChannel}>
             测试连接
@@ -771,7 +771,7 @@ const Backup: React.FC = () => {
                 <Input.Password autoComplete="new-password" placeholder={chModal.editing ? '••••••（留空保持不变）' : ''} />
               </Form.Item>
               <Form.Item name="s3_prefix" label="路径前缀（可选）" extra="桶内的基础子目录，留空则放在桶根">
-                <Input placeholder="如 frpc/" />
+                <Input placeholder="如 kwrt/" />
               </Form.Item>
               <Space size={24}>
                 <Form.Item name="s3_use_ssl" label="HTTPS" valuePropName="checked">
@@ -797,7 +797,7 @@ const Backup: React.FC = () => {
                 <Input.Password autoComplete="new-password" placeholder={chModal.editing ? '••••••（留空保持不变）' : ''} />
               </Form.Item>
               <Form.Item name="dav_prefix" label="路径前缀（可选）" extra="根下的基础子目录">
-                <Input placeholder="如 frpc" />
+                <Input placeholder="如 kwrt" />
               </Form.Item>
             </>
           )}
@@ -809,7 +809,7 @@ const Backup: React.FC = () => {
         title={scModal.editing ? '编辑备份计划' : '新增备份计划'}
         open={scModal.open}
         onCancel={() => setScModal({ open: false })}
-        width={560}
+        width="min(92vw, 640px)"
         onOk={onSaveSchedule}
         confirmLoading={scSaving}
         okText="保存"
@@ -854,7 +854,7 @@ const Backup: React.FC = () => {
             </Form.Item>
           </Space>
           <Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 0 }}>
-            备份内容 = 全部 FRPC 实例配置 + 服务端元数据（meta.json），与「导入/导出」的整体备份一致。
+            备份内容 = 全部网络配置（DHCP/DNS/路由/IPv6 等）+ 服务端元数据（meta.json），与「导入/导出」的整体备份一致。
           </Paragraph>
         </Form>
       </Modal>
@@ -862,7 +862,7 @@ const Backup: React.FC = () => {
       {/* 从备份恢复（独立抽屉） */}
       <Drawer
         title={<Space><CloudDownloadOutlined /> 从备份恢复</Space>}
-        width={680}
+        width="min(92vw, 880px)"
         open={restoreOpen}
         onClose={() => setRestoreOpen(false)}
         destroyOnClose

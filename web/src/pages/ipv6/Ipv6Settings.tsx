@@ -196,7 +196,7 @@ function WANv6Drawer({ open, editing, ifaces, onClose, onSaved }: {
   };
 
   return (
-    <Drawer title={`IPv6 外网设置${editing ? ' · ' + editing.name : '（新增）'}`} width={560} open={open} onClose={onClose} destroyOnClose
+    <Drawer title={`IPv6 外网设置${editing ? ' · ' + editing.name : '（新增）'}`} width="min(92vw, 640px)" open={open} onClose={onClose} destroyOnClose
       footer={<Space><Button type="primary" loading={saving} onClick={onSave}>保存</Button><Button onClick={onClose}>取消</Button></Space>}>
       <Form form={form} layout="vertical">
         {!editing && (
@@ -319,7 +319,7 @@ function LANv6Drawer({ open, editing, ifaces, wans, onClose, onSaved }: {
   };
 
   return (
-    <Drawer title={`IPv6 内网设置${editing ? ' · ' + editing.interface : '（新增）'}`} width={560} open={open} onClose={onClose} destroyOnClose
+    <Drawer title={`IPv6 内网设置${editing ? ' · ' + editing.interface : '（新增）'}`} width="min(92vw, 640px)" open={open} onClose={onClose} destroyOnClose
       footer={<Space><Button type="primary" loading={saving} onClick={onSave}>保存</Button><Button onClick={onClose}>取消</Button></Space>}>
       <Alert type="info" showIcon style={{ marginBottom: 16 }}
         message="若本机为上游的下游设备（其 IPv6 来自上游 DHCPv6），在 LAN 再开 DHCPv6 服务端可能与上游冲突，请按拓扑使用。" />

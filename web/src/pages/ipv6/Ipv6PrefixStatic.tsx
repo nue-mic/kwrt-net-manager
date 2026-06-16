@@ -178,7 +178,7 @@ export default function Ipv6PrefixStatic() {
       />
       <Drawer
         title={editing ? '编辑前缀静态分配' : '添加前缀静态分配'}
-        width={560}
+        width="min(92vw, 600px)"
         open={open}
         onClose={() => setOpen(false)}
         destroyOnClose

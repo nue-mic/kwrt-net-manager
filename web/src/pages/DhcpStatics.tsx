@@ -259,7 +259,7 @@ export default function DhcpStaticsPage() {
       />
       <Drawer
         title={editing ? '编辑静态分配' : '添加静态分配'}
-        width={520}
+        width="min(92vw, 640px)"
         open={open}
         onClose={() => setOpen(false)}
         destroyOnClose
@@ -276,13 +276,23 @@ export default function DhcpStaticsPage() {
           <Form.Item name="hostname" label="主机名称">
             <Input placeholder="可空，留作终端识别" allowClear />
           </Form.Item>
-          <Form.Item name="ip" label="绑定IP" rules={[{ required: true, message: '请输入绑定IP' }]}>
+          <Form.Item
+            name="ip"
+            label="绑定IP"
+            rules={[
+              { required: true, message: '请输入绑定IP' },
+              { pattern: /^((25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(25[0-5]|2[0-4]\d|1?\d?\d)$/, message: 'IPv4 格式不正确，如 192.168.1.100' },
+            ]}
+          >
             <Input placeholder="192.168.1.100" allowClear />
           </Form.Item>
           <Form.Item
             name="mac"
             label="绑定MAC"
-            rules={[{ required: true, message: '请输入绑定MAC' }]}
+            rules={[
+              { required: true, message: '请输入绑定MAC' },
+              { pattern: /^([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}$/, message: 'MAC 格式不正确，如 AA:BB:CC:DD:EE:FF' },
+            ]}
           >
             <Input placeholder="AA:BB:CC:DD:EE:FF" allowClear />
           </Form.Item>

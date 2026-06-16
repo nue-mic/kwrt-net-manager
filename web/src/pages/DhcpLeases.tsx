@@ -21,7 +21,7 @@ function formatRemaining(seconds: number): string {
 export default function DhcpLeasesPage() {
   const { message } = App.useApp();
   const navigate = useNavigate();
-  const { data, loading, reload } = useNetData<net.Lease[]>(() => net.listLeases(), []);
+  const { data, loading, reload } = useNetData<net.Lease[]>(() => net.listLeases(), [], { pollMs: 5000 });
   const { data: ifaces } = useNetData<net.NetInterface[]>(() => net.listInterfaces(), []);
 
   const [iface, setIface] = useState<string>(ALL);

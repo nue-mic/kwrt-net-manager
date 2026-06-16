@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { App, Button, Drawer, Form, Input, Popconfirm, Radio, Space, Table, Tag, Typography } from 'antd';
+import { App, Button, Drawer, Form, Input, Modal, Popconfirm, Radio, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined } from '@ant-design/icons';
 import PageCard from '../components/PageCard';
@@ -52,7 +52,7 @@ export default function DhcpAclPage() {
     }
   };
 
-  const onChangeMode = async (mode: net.ACL['mode']) => {
+  const applyMode = async (mode: net.ACL['mode']) => {
     try {
       await net.setACLMode(mode);
       message.success(mode === 'blacklist' ? '已切换为黑名单' : '已切换为白名单');
@@ -60,6 +60,22 @@ export default function DhcpAclPage() {
     } catch (e) {
       message.error(extractErr(e));
     }
+  };
+
+  const onChangeMode = (mode: net.ACL['mode']) => {
+    // 切到白名单且名单内无启用项 = 所有设备都将拿不到 DHCP，先确认，避免误锁全网。
+    if (mode === 'whitelist' && data.entries.filter((e) => e.enabled).length === 0) {
+      Modal.confirm({
+        title: '切换为白名单？',
+        content: '白名单模式下「仅名单内 MAC 可获取 DHCP」。当前名单为空，切换后所有设备都将无法获取地址。确认继续？',
+        okText: '确认切换',
+        cancelText: '取消',
+        okButtonProps: { danger: true },
+        onOk: () => applyMode(mode),
+      });
+      return;
+    }
+    void applyMode(mode);
   };
 
   const onToggle = async (record: net.ACLEntry) => {
@@ -182,9 +198,10 @@ export default function DhcpAclPage() {
       />
       <Drawer
         title={editing ? '编辑' : '添加'}
-        width={520}
+        width="min(92vw, 560px)"
         open={open}
         onClose={() => setOpen(false)}
+        destroyOnClose
         extra={
           <Space>
             <Button onClick={() => setOpen(false)}>取消</Button>
@@ -198,7 +215,10 @@ export default function DhcpAclPage() {
           <Form.Item
             label="MAC"
             name="mac"
-            rules={[{ required: true, message: '请输入 MAC 地址' }]}
+            rules={[
+              { required: true, message: '请输入 MAC 地址' },
+              { pattern: /^([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}$/, message: 'MAC 格式不正确，如 AA:BB:CC:DD:EE:FF' },
+            ]}
           >
             <Input placeholder="如 AA:BB:CC:DD:EE:FF" />
           </Form.Item>

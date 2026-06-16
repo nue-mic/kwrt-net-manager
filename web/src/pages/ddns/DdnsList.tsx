@@ -223,7 +223,7 @@ export default function DdnsListPage() {
       />
       <Drawer
         title={editing ? '编辑动态域名' : '添加动态域名'}
-        width={520}
+        width="min(92vw, 640px)"
         open={open}
         onClose={() => setOpen(false)}
         destroyOnClose

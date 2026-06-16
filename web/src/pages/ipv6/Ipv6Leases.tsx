@@ -21,7 +21,7 @@ const dash = (v: string) => (v ? v : '—');
 
 export default function Ipv6Leases() {
   const { message } = App.useApp();
-  const { data, loading, error } = useNetData(() => ipv6.listLeasesV6(), [] as ipv6.LeaseV6[]);
+  const { data, loading, error } = useNetData(() => ipv6.listLeasesV6(), [] as ipv6.LeaseV6[], { pollMs: 5000 });
   const [kw, setKw] = useState('');
 
   if (error) message.error(extractErr(error));

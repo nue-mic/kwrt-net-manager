@@ -161,7 +161,7 @@ export default function DnsDomainRoutesPage() {
       />
       <Drawer
         title={editing ? '编辑域名分流' : '添加域名分流'}
-        width={480}
+        width="min(92vw, 580px)"
         open={open}
         onClose={() => setOpen(false)}
         destroyOnClose

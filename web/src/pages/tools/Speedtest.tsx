@@ -21,11 +21,15 @@ export default function SpeedtestPage() {
     }
   };
 
+  // poll 自维护轮询：测速中(running)就启动 1.5s 间隔轮询，结束即停。
+  // 这样无论是本页点「开始测速」还是页面挂载时发现已有测速在跑，都能自动刷新进度。
   const poll = useCallback(async () => {
     try {
       const s = await st.getSpeedtestStatus();
       setStatus(s);
-      if (!s.running && timer.current) {
+      if (s.running) {
+        if (!timer.current) timer.current = window.setInterval(() => void poll(), 1500);
+      } else if (timer.current) {
         window.clearInterval(timer.current);
         timer.current = null;
       }
@@ -42,17 +46,12 @@ export default function SpeedtestPage() {
     };
   }, [poll]);
 
-  const startPolling = () => {
-    if (timer.current) return;
-    timer.current = window.setInterval(() => void poll(), 1500);
-  };
-
   const onRun = async () => {
     setStarting(true);
     try {
       const s = await st.runSpeedtest();
       setStatus(s);
-      startPolling();
+      void poll(); // 立即拉一次以启动自维护轮询
     } catch (e) {
       message.error(extractErr(e));
     } finally {

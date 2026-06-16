@@ -21,7 +21,7 @@ const STATE_META: Record<string, { txt: string; color: string }> = {
 
 export default function Ipv6Neighbors() {
   const { message } = App.useApp();
-  const { data, loading, reload } = useNetData(() => ipv6.listNeighborsV6(), [] as ipv6.NeighborV6[]);
+  const { data, loading, reload } = useNetData(() => ipv6.listNeighborsV6(), [] as ipv6.NeighborV6[], { pollMs: 5000 });
   const [keyword, setKeyword] = useState('');
 
   const onDelete = async (record: ipv6.NeighborV6) => {

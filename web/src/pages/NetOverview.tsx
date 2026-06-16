@@ -19,7 +19,7 @@ export default function NetOverview() {
   const { message } = App.useApp();
   const { data, loading, reload } = useNetData<net.NetOverview>(() => net.getNetOverview(), {
     wan_count: 0, wan_up: 0, connections: 0, lan_count: 0, lan_up: 0, dhcp_on: 0, terminals: 0, free_ports: 0, wans: [], lans: [],
-  });
+  }, { pollMs: 6000 });
   const [nics, setNics] = useState<net.NIC[]>([]);
   const [svc, setSvc] = useState<net.DHCPSvcInfo | null>(null);
   const [installing, setInstalling] = useState(false);
@@ -293,7 +293,7 @@ function IfaceDrawer({ open, role, editing, nics, masks, onClose, onSaved, onAct
   return (
     <Drawer
       title={title}
-      width={560}
+      width="min(92vw, 680px)"
       open={open}
       onClose={onClose}
       destroyOnClose

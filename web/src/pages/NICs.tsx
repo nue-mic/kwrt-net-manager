@@ -28,7 +28,7 @@ const kindLabel: Record<string, { txt: string; color: string }> = {
 };
 
 export default function NICs() {
-  const { data, loading, reload } = useNetData<net.NIC[]>(() => net.listNICs(), []);
+  const { data, loading, reload } = useNetData<net.NIC[]>(() => net.listNICs(), [], { pollMs: 5000 });
 
   const columns: ColumnsType<net.NIC> = [
     { title: '网卡', dataIndex: 'name', render: (v) => <Text strong>{v}</Text> },

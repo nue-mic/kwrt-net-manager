@@ -910,6 +910,18 @@ func (s *Service) ExportJSON() ([]byte, error) {
 	if st.ACLv6, err = s.be.ACLv6(); err != nil {
 		return nil, err
 	}
+	if st.DNS, err = s.be.DNSSettings(); err != nil {
+		return nil, err
+	}
+	if st.DNSDoH, err = s.be.DNSDoH(); err != nil {
+		return nil, err
+	}
+	if st.DNSRecords, err = s.be.DNSRecords(); err != nil {
+		return nil, err
+	}
+	if st.DNSDomainRoutes, err = s.be.DNSDomainRoutes(); err != nil {
+		return nil, err
+	}
 	return json.MarshalIndent(st, "", "  ")
 }
 
@@ -992,6 +1004,31 @@ func (s *Service) ImportJSON(raw []byte) error {
 		st.ACLv6.Mode = ACLBlacklist
 	}
 
+	if err := validateDNSSettings(&st.DNS); err != nil {
+		return err
+	}
+	if err := validateDNSDoH(&st.DNSDoH); err != nil {
+		return err
+	}
+	for i := range st.DNSRecords {
+		if err := validateDNSRecord(&st.DNSRecords[i]); err != nil {
+			return err
+		}
+		if st.DNSRecords[i].ID == "" {
+			st.DNSRecords[i].ID = s.idFn("dns")
+		}
+		st.DNSRecords[i].Managed = true
+	}
+	for i := range st.DNSDomainRoutes {
+		if err := validateDNSDomainRoute(&st.DNSDomainRoutes[i]); err != nil {
+			return err
+		}
+		if st.DNSDomainRoutes[i].ID == "" {
+			st.DNSDomainRoutes[i].ID = s.idFn("dnsr")
+		}
+		st.DNSDomainRoutes[i].Managed = true
+	}
+
 	for i := range st.DHCPServers {
 		st.DHCPServers[i].Managed = true
 	}
@@ -1028,6 +1065,18 @@ func (s *Service) ImportJSON(raw []byte) error {
 		return err
 	}
 	if err := s.be.SaveACLv6(st.ACLv6); err != nil {
+		return err
+	}
+	if err := s.be.SaveDNSRecords(st.DNSRecords); err != nil {
+		return err
+	}
+	if err := s.be.SaveDNSDomainRoutes(st.DNSDomainRoutes); err != nil {
+		return err
+	}
+	if err := s.be.SaveDNSDoH(st.DNSDoH); err != nil {
+		return err
+	}
+	if err := s.be.SaveDNSSettings(st.DNS); err != nil {
 		return err
 	}
 	s.publish(eventbus.TypeDHCPChanged, "apply", len(st.DHCPServers))

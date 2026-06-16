@@ -84,6 +84,28 @@ func registerNetcfgRoutes(r chi.Router, d Deps) {
 	// Live kernel routing table.
 	r.Get("/api/v1/route-table", h.RouteTable)
 
+	// DNS（爱快 DNS 设置 / 自定义解析 / 域名分流 / 缓存状态 / DoH）。
+	r.Get("/api/v1/dns/settings", h.GetDNSSettings)
+	r.Put("/api/v1/dns/settings", h.UpdateDNSSettings)
+	r.Get("/api/v1/dns/doh", h.GetDNSDoH)
+	r.Put("/api/v1/dns/doh", h.UpdateDNSDoH)
+	r.Post("/api/v1/dns/doh/install", h.InstallDoHHandler)
+	r.Get("/api/v1/dns/records", h.ListDNSRecords)
+	r.Post("/api/v1/dns/records", h.CreateDNSRecord)
+	r.Post("/api/v1/dns/records/batch", h.BatchDNSRecords)
+	r.Put("/api/v1/dns/records/{id}", h.UpdateDNSRecord)
+	r.Delete("/api/v1/dns/records/{id}", h.DeleteDNSRecord)
+	r.Post("/api/v1/dns/records/{id}/toggle", h.ToggleDNSRecord)
+	r.Get("/api/v1/dns/domain-routes", h.ListDNSDomainRoutes)
+	r.Post("/api/v1/dns/domain-routes", h.CreateDNSDomainRoute)
+	r.Post("/api/v1/dns/domain-routes/batch", h.BatchDNSDomainRoutes)
+	r.Put("/api/v1/dns/domain-routes/{id}", h.UpdateDNSDomainRoute)
+	r.Delete("/api/v1/dns/domain-routes/{id}", h.DeleteDNSDomainRoute)
+	r.Post("/api/v1/dns/domain-routes/{id}/toggle", h.ToggleDNSDomainRoute)
+	r.Get("/api/v1/dns/cache-stats", h.DNSCacheStats)
+	r.Post("/api/v1/dns/cache/flush", h.FlushDNSCache)
+	r.Get("/api/v1/dns/service", h.DNSService)
+
 	// 网卡列表 + 内外网设置（LAN/WAN 接口 + 物理网卡）。
 	r.Get("/api/v1/nics", h.ListNICs)
 	r.Get("/api/v1/netcfg/overview", h.NetOverview)

@@ -151,6 +151,17 @@ const MainLayout: React.FC = () => {
             ],
           },
           {
+            key: 'dns',
+            icon: <GlobalOutlined />,
+            label: 'DNS 设置',
+            children: [
+              { key: '/dns/settings', label: 'DNS 设置' },
+              { key: '/dns/cache', label: 'DNS 缓存状态' },
+              { key: '/dns/records', label: '自定义解析' },
+              { key: '/dns/domain-routes', label: '域名分流 DNS' },
+            ],
+          },
+          {
             key: 'routes',
             icon: <NodeIndexOutlined />,
             label: '静态路由',
@@ -193,6 +204,7 @@ const MainLayout: React.FC = () => {
     if (location.pathname === '/net' || location.pathname === '/nics') return ['net'];
     if (location.pathname.startsWith('/ipv6')) return ['ipv6'];
     if (location.pathname.startsWith('/dhcp')) return ['dhcp'];
+    if (location.pathname.startsWith('/dns')) return ['dns'];
     if (location.pathname === '/routes' || location.pathname === '/route-table') return ['routes'];
     return [];
   }, [location.pathname]);

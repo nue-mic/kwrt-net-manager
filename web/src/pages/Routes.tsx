@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Alert,
   App,
   Button,
   Drawer,
@@ -48,6 +49,7 @@ export default function RoutesPage() {
   const { message } = App.useApp();
   const { data, loading, reload } = useNetData<net.Route[]>(() => net.listRoutes(), []);
   const { data: interfaces } = useNetData<net.NetInterface[]>(() => net.listInterfaces(), []);
+  const { data: pushMode } = useNetData<net.RoutePushMode>(() => net.getRoutePushMode(), 'off');
   const [selected, setSelected] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<net.Route | null>(null);
@@ -163,8 +165,12 @@ export default function RoutesPage() {
     {
       title: '下发客户端',
       dataIndex: 'push_to_clients',
-      render: (v: boolean, r: net.Route) =>
-        r.family === 'ipv4' && v ? <Tag color="blue">已推送</Tag> : <Tag>-</Tag>,
+      render: (_v: boolean, r: net.Route) => {
+        if (r.family !== 'ipv4' || !r.push_to_clients) return <Tag>-</Tag>;
+        if (pushMode === 'all') return <Tag color="blue">已推送·全部</Tag>;
+        if (pushMode === 'tagged') return <Tag color="cyan">已推送·指定</Tag>;
+        return <Tag color="warning">待开启</Tag>; // 已勾选但总开关关闭
+      },
     },
     { title: '备注', dataIndex: 'remark', render: (v: string) => v || '-' },
     {
@@ -217,6 +223,27 @@ export default function RoutesPage() {
         </>
       }
     >
+      {pushMode === 'off' ? (
+        data.some((r) => r.family === 'ipv4' && r.push_to_clients) && (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 12 }}
+            message="有路由已勾选「下发给客户端」，但 DHCP 服务端的「路由下发」总开关当前为「关闭」，需到 DHCP 服务端页把它改成「全部客户端」或「仅指定设备」后才会真正下发。"
+          />
+        )
+      ) : (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message={
+            pushMode === 'all'
+              ? '路由下发：全部客户端 —— 已勾选的路由经 DHCP option 121 下发给本 LAN 所有客户端（设备续租/重连后生效）。'
+              : '路由下发：仅指定设备 —— 已勾选的路由只下发给「DHCP 静态分配」中开启了『跟随路由推送』的设备。'
+          }
+        />
+      )}
       <Table
         rowKey="id"
         size="small"

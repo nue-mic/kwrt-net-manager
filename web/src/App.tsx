@@ -13,6 +13,12 @@ const DhcpLeases = lazy(() => import('./pages/DhcpLeases'));
 const DhcpAcl = lazy(() => import('./pages/DhcpAcl'));
 const RoutesPage = lazy(() => import('./pages/Routes'));
 const RouteTable = lazy(() => import('./pages/RouteTable'));
+const Ipv6Settings = lazy(() => import('./pages/ipv6/Ipv6Settings'));
+const Ipv6LineDetail = lazy(() => import('./pages/ipv6/Ipv6LineDetail'));
+const Ipv6Leases = lazy(() => import('./pages/ipv6/Ipv6Leases'));
+const Ipv6PrefixStatic = lazy(() => import('./pages/ipv6/Ipv6PrefixStatic'));
+const Ipv6Acl = lazy(() => import('./pages/ipv6/Ipv6Acl'));
+const Ipv6Neighbors = lazy(() => import('./pages/ipv6/Ipv6Neighbors'));
 const SystemPage = lazy(() => import('./pages/System'));
 const Backup = lazy(() => import('./pages/Backup'));
 const Settings = lazy(() => import('./pages/Settings'));
@@ -48,6 +54,16 @@ function App() {
 
             <Route path="routes" element={<RoutesPage />} />
             <Route path="route-table" element={<RouteTable />} />
+
+            <Route path="ipv6">
+              <Route index element={<Navigate to="/ipv6/settings" replace />} />
+              <Route path="settings" element={<Ipv6Settings />} />
+              <Route path="line-detail" element={<Ipv6LineDetail />} />
+              <Route path="leases" element={<Ipv6Leases />} />
+              <Route path="prefix-static" element={<Ipv6PrefixStatic />} />
+              <Route path="acl" element={<Ipv6Acl />} />
+              <Route path="neighbors" element={<Ipv6Neighbors />} />
+            </Route>
 
             <Route path="system" element={<SystemPage />} />
             <Route path="backup" element={<Backup />} />

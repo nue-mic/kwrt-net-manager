@@ -155,6 +155,12 @@ type State struct {
 	// NetIfaces holds LAN/WAN configs for the store (dev) backend; the uci
 	// backend reads/writes /etc/config/network directly and ignores this field.
 	NetIfaces []NetIface `json:"net_ifaces,omitempty"`
+	// IPv6 sidecar (authoritative on the uci backend too; runtime LeaseV6/
+	// NeighborV6/LineV6 are NOT persisted — read live on each request).
+	WANv6s          []WANv6          `json:"wan_v6,omitempty"`
+	LANv6s          []LANv6          `json:"lan_v6,omitempty"`
+	PrefixStaticsV6 []PrefixStaticV6 `json:"prefix_statics_v6,omitempty"`
+	ACLv6           ACLv6            `json:"acl_v6,omitempty"`
 }
 
 // CloneState returns a deep copy of s (slices are freshly allocated).
@@ -172,5 +178,12 @@ func CloneState(s State) State {
 	for i := range out.NetIfaces {
 		out.NetIfaces[i].Ports = append([]string(nil), s.NetIfaces[i].Ports...)
 	}
+	out.WANv6s = append([]WANv6(nil), s.WANv6s...)
+	out.LANv6s = append([]LANv6(nil), s.LANv6s...)
+	for i := range out.LANv6s {
+		out.LANv6s[i].DNSServers = append([]string(nil), s.LANv6s[i].DNSServers...)
+	}
+	out.PrefixStaticsV6 = append([]PrefixStaticV6(nil), s.PrefixStaticsV6...)
+	out.ACLv6 = ACLv6{Mode: s.ACLv6.Mode, Entries: append([]ACLv6Entry(nil), s.ACLv6.Entries...)}
 	return out
 }

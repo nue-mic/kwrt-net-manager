@@ -835,6 +835,18 @@ func (s *Service) ExportJSON() ([]byte, error) {
 	if st.Routes, err = s.be.Routes(); err != nil {
 		return nil, err
 	}
+	if st.WANv6s, err = s.be.WANv6s(); err != nil {
+		return nil, err
+	}
+	if st.LANv6s, err = s.be.LANv6s(); err != nil {
+		return nil, err
+	}
+	if st.PrefixStaticsV6, err = s.be.PrefixStaticsV6(); err != nil {
+		return nil, err
+	}
+	if st.ACLv6, err = s.be.ACLv6(); err != nil {
+		return nil, err
+	}
 	return json.MarshalIndent(st, "", "  ")
 }
 
@@ -880,6 +892,42 @@ func (s *Service) ImportJSON(raw []byte) error {
 	if st.ACL.Mode == "" {
 		st.ACL.Mode = ACLBlacklist
 	}
+	for i := range st.WANv6s {
+		if err := validateWANv6(&st.WANv6s[i]); err != nil {
+			return err
+		}
+		if st.WANv6s[i].ID == "" {
+			st.WANv6s[i].ID = s.idFn("wan6")
+		}
+		st.WANv6s[i].Managed = true
+	}
+	for i := range st.LANv6s {
+		if err := validateLANv6(&st.LANv6s[i]); err != nil {
+			return err
+		}
+		st.LANv6s[i].Managed = true
+	}
+	for i := range st.PrefixStaticsV6 {
+		if err := validatePrefixStaticV6(&st.PrefixStaticsV6[i]); err != nil {
+			return err
+		}
+		if st.PrefixStaticsV6[i].ID == "" {
+			st.PrefixStaticsV6[i].ID = s.idFn("ps6")
+		}
+		st.PrefixStaticsV6[i].Managed = true
+	}
+	for i := range st.ACLv6.Entries {
+		if err := validateACLv6Entry(&st.ACLv6.Entries[i]); err != nil {
+			return err
+		}
+		if st.ACLv6.Entries[i].ID == "" {
+			st.ACLv6.Entries[i].ID = s.idFn("aclv6")
+		}
+		st.ACLv6.Entries[i].Managed = true
+	}
+	if st.ACLv6.Mode == "" {
+		st.ACLv6.Mode = ACLBlacklist
+	}
 
 	for i := range st.DHCPServers {
 		st.DHCPServers[i].Managed = true
@@ -907,8 +955,21 @@ func (s *Service) ImportJSON(raw []byte) error {
 	if err := s.be.SaveRoutes(st.Routes); err != nil {
 		return err
 	}
+	if err := s.be.SaveWANv6s(st.WANv6s); err != nil {
+		return err
+	}
+	if err := s.be.SaveLANv6s(st.LANv6s); err != nil {
+		return err
+	}
+	if err := s.be.SavePrefixStaticsV6(st.PrefixStaticsV6); err != nil {
+		return err
+	}
+	if err := s.be.SaveACLv6(st.ACLv6); err != nil {
+		return err
+	}
 	s.publish(eventbus.TypeDHCPChanged, "apply", len(st.DHCPServers))
 	s.publish(eventbus.TypeRouteChanged, "apply", len(st.Routes))
+	s.publish(eventbus.TypeIPv6Changed, "apply", len(st.WANv6s)+len(st.LANv6s))
 	return nil
 }
 

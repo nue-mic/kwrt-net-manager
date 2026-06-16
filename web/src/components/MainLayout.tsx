@@ -117,6 +117,15 @@ const MainLayout: React.FC = () => {
   const menuItems: MenuItem[] = useMemo(
     () => [
       {
+        key: 'g-dash',
+        type: 'group',
+        label: 'Dashboard',
+        children: [
+          { key: '/dashboard', icon: <DashboardOutlined />, label: '系统概览' },
+          { key: '/system', icon: <HddOutlined />, label: '系统监控' },
+        ],
+      },
+      {
         key: 'g-net',
         type: 'group',
         label: '网络设置',
@@ -150,6 +159,19 @@ const MainLayout: React.FC = () => {
               { key: '/route-table', label: '当前路由表' },
             ],
           },
+          {
+            key: 'ipv6',
+            icon: <GlobalOutlined />,
+            label: 'IPv6',
+            children: [
+              { key: '/ipv6/settings', label: 'IPv6设置' },
+              { key: '/ipv6/line-detail', label: 'IPv6线路详情' },
+              { key: '/ipv6/leases', label: 'DHCPv6终端' },
+              { key: '/ipv6/prefix-static', label: '前缀静态分配' },
+              { key: '/ipv6/acl', label: 'DHCPv6黑白名单' },
+              { key: '/ipv6/neighbors', label: '邻居列表' },
+            ],
+          },
         ],
       },
       {
@@ -157,11 +179,9 @@ const MainLayout: React.FC = () => {
         type: 'group',
         label: '系统',
         children: [
-          { key: '/dashboard', icon: <DashboardOutlined />, label: '概览' },
-          { key: '/system', icon: <HddOutlined />, label: '系统监控' },
           { key: '/backup', icon: <CloudUploadOutlined />, label: '定时备份' },
-          { key: '/settings', icon: <SettingOutlined />, label: '设置' },
-          { key: '/about', icon: <InfoCircleOutlined />, label: '关于' },
+          { key: '/settings', icon: <SettingOutlined />, label: '系统设置' },
+          { key: '/about', icon: <InfoCircleOutlined />, label: '关于我们' },
         ],
       },
     ],
@@ -171,6 +191,7 @@ const MainLayout: React.FC = () => {
   const selectedKey = useMemo(() => location.pathname, [location.pathname]);
   const openKeys = useMemo(() => {
     if (location.pathname === '/net' || location.pathname === '/nics') return ['net'];
+    if (location.pathname.startsWith('/ipv6')) return ['ipv6'];
     if (location.pathname.startsWith('/dhcp')) return ['dhcp'];
     if (location.pathname === '/routes' || location.pathname === '/route-table') return ['routes'];
     return [];

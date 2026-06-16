@@ -92,6 +92,48 @@ func registerNetcfgRoutes(r chi.Router, d Deps) {
 	r.Put("/api/v1/ifaces/{id}", h.UpdateNetIface)
 	r.Delete("/api/v1/ifaces/{id}", h.DeleteNetIface)
 	r.Post("/api/v1/ifaces/{id}/action", h.IfaceAction)
+
+	// IPv6（爱快 IPv6 菜单全套）。
+	// 外网（WANv6，odhcp6c 客户端侧）。
+	r.Get("/api/v1/ipv6/wan", h.ListWANv6)
+	r.Post("/api/v1/ipv6/wan", h.CreateWANv6)
+	r.Post("/api/v1/ipv6/wan/batch", h.BatchWANv6)
+	r.Get("/api/v1/ipv6/wan/{id}", h.GetWANv6)
+	r.Put("/api/v1/ipv6/wan/{id}", h.UpdateWANv6)
+	r.Delete("/api/v1/ipv6/wan/{id}", h.DeleteWANv6)
+	r.Post("/api/v1/ipv6/wan/{id}/toggle", h.ToggleWANv6)
+	r.Post("/api/v1/ipv6/wan/{id}/duid", h.RegenWANv6DUID)
+	r.Get("/api/v1/ipv6/transition-pkg", h.TransitionPkgV6)
+	// 内网（LANv6，odhcpd RA/DHCPv6 服务端侧）。
+	r.Get("/api/v1/ipv6/lan", h.ListLANv6)
+	r.Post("/api/v1/ipv6/lan", h.CreateLANv6)
+	r.Post("/api/v1/ipv6/lan/batch", h.BatchLANv6)
+	r.Get("/api/v1/ipv6/lan/{id}", h.GetLANv6)
+	r.Put("/api/v1/ipv6/lan/{id}", h.UpdateLANv6)
+	r.Delete("/api/v1/ipv6/lan/{id}", h.DeleteLANv6)
+	r.Post("/api/v1/ipv6/lan/{id}/toggle", h.ToggleLANv6)
+	// DHCPv6 终端（只读）。
+	r.Get("/api/v1/ipv6/leases", h.ListLeasesV6)
+	// 前缀静态分配。
+	r.Get("/api/v1/ipv6/prefix-static", h.ListPrefixStaticsV6)
+	r.Post("/api/v1/ipv6/prefix-static", h.CreatePrefixStaticV6)
+	r.Post("/api/v1/ipv6/prefix-static/batch", h.BatchPrefixStaticsV6)
+	r.Put("/api/v1/ipv6/prefix-static/{id}", h.UpdatePrefixStaticV6)
+	r.Delete("/api/v1/ipv6/prefix-static/{id}", h.DeletePrefixStaticV6)
+	r.Post("/api/v1/ipv6/prefix-static/{id}/toggle", h.TogglePrefixStaticV6)
+	// DHCPv6 接入控制（黑白名单）。
+	r.Get("/api/v1/ipv6/acl", h.GetACLv6)
+	r.Put("/api/v1/ipv6/acl/mode", h.SetACLv6Mode)
+	r.Post("/api/v1/ipv6/acl/entries", h.AddACLv6Entry)
+	r.Put("/api/v1/ipv6/acl/entries/{id}", h.UpdateACLv6Entry)
+	r.Delete("/api/v1/ipv6/acl/entries/{id}", h.DeleteACLv6Entry)
+	r.Post("/api/v1/ipv6/acl/entries/{id}/toggle", h.ToggleACLv6Entry)
+	// 邻居列表 / 线路详情 / 服务信息。
+	r.Get("/api/v1/ipv6/neighbors", h.ListNeighborsV6)
+	r.Delete("/api/v1/ipv6/neighbors", h.DeleteNeighborV6)
+	r.Post("/api/v1/ipv6/neighbors/flush", h.FlushNeighborsV6)
+	r.Get("/api/v1/ipv6/lines", h.ListLinesV6)
+	r.Get("/api/v1/ipv6/service", h.DHCPv6Service)
 }
 
 // writeNetErr maps netcfg errors to HTTP responses: ErrNotFound → 404, any

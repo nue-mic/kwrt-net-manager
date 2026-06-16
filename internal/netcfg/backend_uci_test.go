@@ -15,6 +15,7 @@ type fakeRunner struct {
 	show  map[string]string // `uci -q show <config>` output
 	get   map[string]string // `uci -q get <key>` value
 	route string            // `ip route show`
+	cmd   map[string]string // 任意命令 "name args..." → 输出（优先于内置 case，用于 ubus/ip -6 neigh）
 }
 
 type fakeCall struct {
@@ -25,6 +26,11 @@ type fakeCall struct {
 
 func (f *fakeRunner) Run(stdin, name string, args ...string) (string, error) {
 	f.calls = append(f.calls, fakeCall{stdin, name, append([]string(nil), args...)})
+	if f.cmd != nil {
+		if v, ok := f.cmd[strings.TrimSpace(name+" "+strings.Join(args, " "))]; ok {
+			return v, nil
+		}
+	}
 	switch {
 	case name == "uci" && len(args) >= 1 && args[0] == "batch":
 		return "", nil

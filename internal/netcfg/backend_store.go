@@ -286,7 +286,7 @@ func (b *storeBackend) RouteTable(family string) ([]RouteEntry, error) {
 // ---- seed ----
 
 func seedState() State {
-	return State{
+	st := State{
 		DHCPServers: []DHCPServer{{
 			ID: "dhcp_seedlan", Interface: "lan", Enabled: true,
 			IPStart: "192.168.1.100", IPEnd: "192.168.1.200", Netmask: "255.255.255.0",
@@ -319,6 +319,8 @@ func seedState() State {
 			},
 		},
 	}
+	st.WANv6s, st.LANv6s, st.PrefixStaticsV6, st.ACLv6 = seedIPv6()
+	return st
 }
 
 func orHostname(h, fallback string) string {

@@ -403,6 +403,7 @@ func (b *uciBackend) importExisting() error {
 			st.Routes = append(st.Routes, r)
 		}
 	}
+	b.importIPv6Into(&st)
 	return b.replaceState(st)
 }
 

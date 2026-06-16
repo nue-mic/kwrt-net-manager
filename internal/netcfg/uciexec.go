@@ -35,8 +35,15 @@ func (realRunner) Run(stdin, name string, args ...string) (string, error) {
 // This marker-scoped discipline is what keeps the integration upgrade-safe
 // across OpenWrt versions.
 func managedSections(show, config string) []string {
+	return managedSectionsMarker(show, config, managedMarker)
+}
+
+// managedSectionsMarker is managedSections with an explicit marker value, so the
+// IPv6 projection can track its own sections (managedMarkerV6) independently of
+// the IPv4 ones — neither apply deletes the other's sections.
+func managedSectionsMarker(show, config, marker string) []string {
 	prefix := config + "."
-	suffix := "." + managedOpt + "='" + managedMarker + "'"
+	suffix := "." + managedOpt + "='" + marker + "'"
 	var names []string
 	seen := map[string]bool{}
 	for _, line := range strings.Split(show, "\n") {

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sort"
 	"strings"
@@ -107,9 +108,40 @@ func (s *Service) GetDHCPServer(id string) (DHCPServer, error) {
 	return DHCPServer{}, ErrNotFound
 }
 
+// checkPoolSubnet enforces that a pool's address range lies inside its bound
+// interface's subnet, and fills in the authoritative (interface) netmask. A
+// dnsmasq pool has no independent netmask — start/limit are always offsets into
+// the interface network — so an out-of-subnet range would otherwise be silently
+// truncated. If the interface can't be resolved (e.g. the store/dev backend),
+// the check is skipped rather than blocking.
+func (s *Service) checkPoolSubnet(in *DHCPServer) error {
+	ifaces, err := s.be.Interfaces()
+	if err != nil {
+		return nil
+	}
+	for _, i := range ifaces {
+		if i.Name != in.Interface {
+			continue
+		}
+		if i.IPv4 == "" || i.Netmask == "" {
+			return nil
+		}
+		if !netutil.SameSubnet(in.IPStart, i.IPv4, i.Netmask) || !netutil.SameSubnet(in.IPEnd, i.IPv4, i.Netmask) {
+			return fmt.Errorf("客户端地址 %s-%s 不在接口 %s 的子网（%s / %s）内：DHCP 池必须落在接口网段内；如需更换网段，请先到「内外网设置」修改该接口的 IP/掩码",
+				in.IPStart, in.IPEnd, in.Interface, i.IPv4, i.Netmask)
+		}
+		in.Netmask = i.Netmask // 接口掩码为权威值，回填以保持一致
+		return nil
+	}
+	return nil
+}
+
 // CreateDHCPServer validates + persists a new pool.
 func (s *Service) CreateDHCPServer(in DHCPServer) (DHCPServer, error) {
 	if err := validateDHCPServer(&in); err != nil {
+		return DHCPServer{}, err
+	}
+	if err := s.checkPoolSubnet(&in); err != nil {
 		return DHCPServer{}, err
 	}
 	s.mu.Lock()
@@ -132,6 +164,9 @@ func (s *Service) CreateDHCPServer(in DHCPServer) (DHCPServer, error) {
 // UpdateDHCPServer replaces an existing pool.
 func (s *Service) UpdateDHCPServer(id string, in DHCPServer) (DHCPServer, error) {
 	if err := validateDHCPServer(&in); err != nil {
+		return DHCPServer{}, err
+	}
+	if err := s.checkPoolSubnet(&in); err != nil {
 		return DHCPServer{}, err
 	}
 	s.mu.Lock()

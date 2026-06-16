@@ -115,8 +115,7 @@ func TestAPIDHCPServerLifecycle(t *testing.T) {
 		"interface": "lan2", "enabled": true,
 		"ip_start": "192.168.2.10", "ip_end": "192.168.2.100", "netmask": "255.255.255.0",
 		"gateway": "192.168.2.1", "dns_primary": "1.1.1.1", "dns_secondary": "",
-		"lease_minutes": 60, "exclude": []string{}, "expired_keep_hours": 0,
-		"check_ip": true, "relay_only": false, "assoc_interface": "all", "custom_options": []any{},
+		"lease_minutes": 60, "exclude": []string{}, "custom_options": []any{},
 	})
 	if w.Code != 201 {
 		t.Fatalf("create: %d %s", w.Code, w.Body)

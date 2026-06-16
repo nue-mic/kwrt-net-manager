@@ -23,10 +23,6 @@ export interface DHCPServer {
   dns_secondary: string;
   lease_minutes: number;
   exclude: string[];
-  expired_keep_hours: number;
-  check_ip: boolean;
-  relay_only: boolean;
-  assoc_interface: string;
   custom_options: CustomOption[];
   remaining: number; // 只读
 }

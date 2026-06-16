@@ -25,9 +25,9 @@ func validateDHCPServer(s *DHCPServer) error {
 	if s.Netmask != "" && !netutil.IsValidNetmask(s.Netmask) {
 		return errors.New("子网掩码不合法")
 	}
-	if s.Netmask != "" && !netutil.SameSubnet(s.IPStart, s.IPEnd, s.Netmask) {
-		return errors.New("客户端地址起止必须在同一子网内")
-	}
+	// 注意：DHCP 池范围是否落在接口子网内，由 Service 层按「绑定接口」的真实
+	// IP/掩码校验（见 checkPoolSubnet）。dnsmasq 池没有独立掩码，start/limit 永远
+	// 相对接口网段计算，故此处不再用表单掩码做 SameSubnet 判定。
 	if s.Gateway != "" && !netutil.IsIPv4(s.Gateway) {
 		return errors.New("网关不是合法的 IPv4 地址")
 	}
@@ -39,9 +39,6 @@ func validateDHCPServer(s *DHCPServer) error {
 	}
 	if s.LeaseMinutes <= 0 {
 		return errors.New("租期（分钟）必须大于 0")
-	}
-	if s.ExpiredKeepHours < 0 {
-		return errors.New("过期地址保留时间不能为负")
 	}
 	for _, line := range s.Exclude {
 		if strings.TrimSpace(line) == "" {

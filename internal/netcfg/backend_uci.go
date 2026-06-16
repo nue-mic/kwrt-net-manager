@@ -148,6 +148,8 @@ func (b *uciBackend) apply() error {
 	statics, _ := b.Statics()
 	acl, _ := b.ACL()
 	routes, _ := b.Routes()
+	arpBind, _ := b.ARPBind()
+	whitelist := acl.Mode == ACLWhitelist
 
 	existDhcp := b.managedNames("dhcp")
 	existNet := b.managedNames("network")
@@ -190,6 +192,24 @@ func (b *uciBackend) apply() error {
 		for _, o := range s.CustomOptions {
 			fmt.Fprintf(&d, "add_list dhcp.%s.dhcp_option='%d,%s'\n", id, o.Code, o.Value)
 		}
+		// 白名单模式 = 仅服务已知/静态主机：dnsmasq `dhcp-range=...,static`（option dynamicdhcp '0'）。
+		if whitelist {
+			fmt.Fprintf(&d, "set dhcp.%s.dynamicdhcp='0'\n", id)
+		} else {
+			fmt.Fprintf(&d, "delete dhcp.%s.dynamicdhcp\n", id)
+		}
+		// 排除地址：dnsmasq 无「池内挖洞」原语，按 OpenWrt 习惯用占位 host 保留每个被排除的
+		// IP（保留地址不再被动态分配）。仅在池启用时投射；停用/删除后由 GC 清除。
+		if s.Enabled {
+			for _, ip := range expandExclude(s.Exclude) {
+				xid := uciName(id + "_x_" + ip)
+				keepDhcp[xid] = true
+				fmt.Fprintf(&d, "set dhcp.%s=host\n", xid)
+				fmt.Fprintf(&d, "set dhcp.%s.%s='%s'\n", xid, managedOpt, managedMarker)
+				fmt.Fprintf(&d, "set dhcp.%s.mac='%s'\n", xid, placeholderMAC(ip))
+				fmt.Fprintf(&d, "set dhcp.%s.ip='%s'\n", xid, ip)
+			}
+		}
 	}
 	for _, s := range statics {
 		if !s.Enabled || !s.Managed {
@@ -206,8 +226,48 @@ func (b *uciBackend) apply() error {
 		} else {
 			fmt.Fprintf(&d, "delete dhcp.%s.name\n", id)
 		}
+		// 每条静态分配的网关/DNS：OpenWrt 的 config host 没有 option 3/6，原生经 dnsmasq tag
+		// 下发——建一个具名 `config tag` 承载 option 3/6，再把该 host 打上同名 tag。
+		if opts := hostTagOptions(s); len(opts) > 0 {
+			tagid := id + "_t"
+			keepDhcp[tagid] = true
+			fmt.Fprintf(&d, "set dhcp.%s=tag\n", tagid)
+			fmt.Fprintf(&d, "set dhcp.%s.%s='%s'\n", tagid, managedOpt, managedMarker)
+			fmt.Fprintf(&d, "delete dhcp.%s.dhcp_option\n", tagid)
+			for _, o := range opts {
+				fmt.Fprintf(&d, "add_list dhcp.%s.dhcp_option='%s'\n", tagid, o)
+			}
+			fmt.Fprintf(&d, "set dhcp.%s.tag='%s'\n", id, tagid)
+		} else {
+			fmt.Fprintf(&d, "delete dhcp.%s.tag\n", id)
+		}
 	}
-	if acl.Mode == ACLBlacklist {
+	// MAC 黑/白名单 —— 必须用 OpenWrt dnsmasq 真正认得的原语（实测得知：config host 的
+	// `option ignore` 根本不被 init 识别，且无 ip/name/hostid 的 host 会被直接丢弃）：
+	//   黑名单：每个 MAC -> `option ip 'ignore'`，生成 dhcp-host=MAC,ignore 拒发；
+	//   白名单：各池已置 dynamicdhcp='0'（仅服务有保留 IP 的已知主机），故给每个放行 MAC
+	//          在「首个启用池」内分配一个空闲保留 IP；名单外设备拿不到地址。
+	if whitelist {
+		nextIP := whitelistAllocator(servers, usedPoolIPs(servers, statics))
+		for _, e := range acl.Entries {
+			if !e.Enabled || !e.Managed {
+				continue
+			}
+			ip := nextIP()
+			if ip == "" { // 无启用池或池内地址耗尽
+				if b.log != nil {
+					b.log.Warn("netcfg(uci): whitelist 地址池已满，部分放行 MAC 未分配", slog.String("mac", e.MAC))
+				}
+				break
+			}
+			id := uciName(e.ID)
+			keepDhcp[id] = true
+			fmt.Fprintf(&d, "set dhcp.%s=host\n", id)
+			fmt.Fprintf(&d, "set dhcp.%s.%s='%s'\n", id, managedOpt, managedMarker)
+			fmt.Fprintf(&d, "set dhcp.%s.mac='%s'\n", id, e.MAC)
+			fmt.Fprintf(&d, "set dhcp.%s.ip='%s'\n", id, ip)
+		}
+	} else {
 		for _, e := range acl.Entries {
 			if !e.Enabled || !e.Managed {
 				continue
@@ -217,7 +277,7 @@ func (b *uciBackend) apply() error {
 			fmt.Fprintf(&d, "set dhcp.%s=host\n", id)
 			fmt.Fprintf(&d, "set dhcp.%s.%s='%s'\n", id, managedOpt, managedMarker)
 			fmt.Fprintf(&d, "set dhcp.%s.mac='%s'\n", id, e.MAC)
-			fmt.Fprintf(&d, "set dhcp.%s.ignore='1'\n", id)
+			fmt.Fprintf(&d, "set dhcp.%s.ip='ignore'\n", id) // 原生黑名单：dhcp-host=MAC,ignore
 		}
 	}
 	for n := range existDhcp {
@@ -225,12 +285,22 @@ func (b *uciBackend) apply() error {
 			fmt.Fprintf(&d, "delete dhcp.%s\n", n)
 		}
 	}
-	// Multi-backend "force enable": on an odhcpd-only box (no dnsmasq), a pool
-	// only serves once odhcpd is the main DHCPv4 server. Flip it on automatically
-	// when a pool is enabled, but only ever touch an existing odhcpd section.
-	if anyDHCPEnabled && dhcpService() == "odhcpd" {
-		if _, err := b.uciGet("dhcp.odhcpd"); err == nil {
-			d.WriteString("set dhcp.odhcpd.maindhcp='1'\n")
+	// Multi-backend DHCPv4 server selection — only ever touch an existing odhcpd section:
+	//   - odhcpd-only box (no dnsmasq): a pool only serves once odhcpd is the main
+	//     DHCPv4 server, so flip maindhcp on when a pool is enabled.
+	//   - dnsmasq present: dnsmasq must stay the DHCPv4 server. A stale maindhcp=1
+	//     makes dnsmasq's init skip dhcp-range entirely and nothing serves DHCPv4
+	//     (devices get no lease), so force it back to 0. This keeps the toggle
+	//     symmetric — without it a box that was ever odhcpd-only stays broken after
+	//     dnsmasq is installed.
+	if _, err := b.uciGet("dhcp.odhcpd"); err == nil {
+		switch dhcpService() {
+		case "odhcpd":
+			if anyDHCPEnabled {
+				d.WriteString("set dhcp.odhcpd.maindhcp='1'\n")
+			}
+		case "dnsmasq":
+			d.WriteString("set dhcp.odhcpd.maindhcp='0'\n")
 		}
 	}
 	d.WriteString("commit dhcp\n")
@@ -293,6 +363,9 @@ func (b *uciBackend) apply() error {
 	if initdExists("network") {
 		_, _ = b.run.Run("", "/etc/init.d/network", "reload")
 	}
+	// 兼容 ARP 绑定：把启用的托管静态分配下成内核静态邻居表项（防 IP↔MAC 漂移）。
+	// best-effort，失败不影响主流程；不跨重启持久（下次保存会重新下发）。
+	b.applyARP(statics, arpBind)
 	return firstErr
 }
 
@@ -332,7 +405,6 @@ func (b *uciBackend) importExisting() error {
 					Enabled:      first(s.opts["ignore"]) != "1",
 					LeaseMinutes: leasetimeToMin(first(s.opts["leasetime"])),
 					Exclude:      []string{}, CustomOptions: []CustomOption{},
-					AssocInterface: "all", CheckIP: true,
 				}
 				im := ipmask[iface]
 				srv.Netmask = im[1]
@@ -410,11 +482,14 @@ func (b *uciBackend) importExisting() error {
 // startLimit computes dnsmasq start (host offset) + limit (count) from the pool
 // start/end and the interface IP/mask. Falls back to the /24 host octet.
 func (b *uciBackend) startLimit(srv DHCPServer) (int, int) {
-	mask := srv.Netmask
-	if mask == "" {
-		mask, _ = b.uciGet("network." + srv.Interface + ".netmask")
-	}
-	if ip := b.ifaceIP(srv.Interface); ip != "" && mask != "" {
+	// A dnsmasq pool has no independent netmask: start/limit are offsets into the
+	// BOUND INTERFACE's network. Always compute against the interface IP/mask, not
+	// the form netmask (which is only a display/advertised value). The Service
+	// layer already rejects an out-of-subnet range, so DHCPStartLimit should
+	// succeed; the last-octet fallback is purely defensive for a missing interface.
+	ip := b.ifaceIP(srv.Interface)
+	mask, _ := b.uciGet("network." + srv.Interface + ".netmask")
+	if ip != "" && mask != "" {
 		if s, l, ok := netutil.DHCPStartLimit(ip, mask, srv.IPStart, srv.IPEnd); ok {
 			return s, l
 		}
@@ -434,6 +509,134 @@ func (b *uciBackend) ifaceIP(iface string) string {
 		ip = ip[:i]
 	}
 	return ip
+}
+
+// ifaceDevice resolves the L2 device of a logical interface (for `ip neigh`).
+// On a bridged LAN this is br-<name>; on this project's test box, plain eth0.
+func (b *uciBackend) ifaceDevice(iface string) string {
+	if iface == "" {
+		iface = "lan"
+	}
+	if dev, err := b.uciGet("network." + iface + ".device"); err == nil && dev != "" {
+		return dev
+	}
+	return ""
+}
+
+// applyARP installs/removes static neighbour entries for managed reservations, so
+// the configured IP↔MAC bindings are also enforced at the ARP layer when the
+// global ARP-bind toggle is on. best-effort; errors are intentionally ignored.
+func (b *uciBackend) applyARP(statics []StaticLease, on bool) {
+	for _, s := range statics {
+		if !s.Managed {
+			continue
+		}
+		dev := b.ifaceDevice(s.Interface)
+		if dev == "" {
+			continue
+		}
+		if on && s.Enabled {
+			_, _ = b.run.Run("", "ip", "neigh", "replace", s.IP, "lladdr", s.MAC, "dev", dev, "nud", "permanent")
+		} else {
+			_, _ = b.run.Run("", "ip", "neigh", "del", s.IP, "dev", dev)
+		}
+	}
+}
+
+// hostTagOptions returns the per-host dhcp_option values (option 3 gateway,
+// option 6 DNS) a static reservation needs delivered via a dnsmasq tag.
+func hostTagOptions(s StaticLease) []string {
+	var out []string
+	if strings.TrimSpace(s.Gateway) != "" {
+		out = append(out, "3,"+s.Gateway)
+	}
+	if dns := joinDNS(s.DNSPrimary, s.DNSSecondary); dns != "" {
+		out = append(out, "6,"+dns)
+	}
+	return out
+}
+
+// expandExclude flattens iKuai-style exclude lines ("ip" or "ip-ip") into the
+// individual IPv4 addresses to reserve. Capped to avoid a pathological range
+// blowing up the config; overflow is dropped (excludes are sidecar-authoritative
+// and such ranges are not a real use case).
+func expandExclude(lines []string) []string {
+	const limit = 1024
+	var out []string
+	for _, line := range lines {
+		a, c, ok := netutil.ParseExcludeLine(line)
+		if !ok {
+			continue
+		}
+		au, _ := netutil.IPv4ToUint32(a)
+		cu, _ := netutil.IPv4ToUint32(c)
+		for u := au; u <= cu && len(out) < limit; u++ {
+			out = append(out, netutil.Uint32ToIPv4(u))
+		}
+	}
+	return out
+}
+
+// placeholderMAC derives a stable, locally-administered MAC (02:00:o1:o2:o3:o4)
+// from an IPv4 — used to reserve an excluded address so dnsmasq keeps it out of
+// the dynamic pool, without colliding with any real device.
+func placeholderMAC(ip string) string {
+	u, ok := netutil.IPv4ToUint32(ip)
+	if !ok {
+		return "02:00:00:00:00:00"
+	}
+	return fmt.Sprintf("02:00:%02x:%02x:%02x:%02x", byte(u>>24), byte(u>>16), byte(u>>8), byte(u))
+}
+
+// usedPoolIPs collects addresses already spoken for (enabled managed static
+// reservations + excluded placeholders) so the whitelist allocator skips them.
+func usedPoolIPs(servers []DHCPServer, statics []StaticLease) map[string]bool {
+	used := map[string]bool{}
+	for _, s := range statics {
+		if s.Enabled && s.Managed && s.IP != "" {
+			used[s.IP] = true
+		}
+	}
+	for _, srv := range servers {
+		for _, ip := range expandExclude(srv.Exclude) {
+			used[ip] = true
+		}
+	}
+	return used
+}
+
+// whitelistAllocator yields successive free IPs from the FIRST enabled managed
+// pool's range, skipping already-used addresses. Returns "" when no pool exists
+// or the range is exhausted. (Whitelist is global; multi-pool boxes only get
+// allocations from the first pool — the common single-LAN case is exact.)
+func whitelistAllocator(servers []DHCPServer, used map[string]bool) func() string {
+	var cur, end uint32
+	have := false
+	for _, srv := range servers {
+		if !srv.Managed || !srv.Enabled {
+			continue
+		}
+		su, ok1 := netutil.IPv4ToUint32(srv.IPStart)
+		eu, ok2 := netutil.IPv4ToUint32(srv.IPEnd)
+		if ok1 && ok2 && eu >= su {
+			cur, end, have = su, eu, true
+			break
+		}
+	}
+	return func() string {
+		if !have {
+			return ""
+		}
+		for cur <= end {
+			ip := netutil.Uint32ToIPv4(cur)
+			cur++
+			if !used[ip] {
+				used[ip] = true
+				return ip
+			}
+		}
+		return ""
+	}
 }
 
 func (b *uciBackend) uciGet(key string) (string, error) {

@@ -11,7 +11,6 @@ import {
   Popconfirm,
   Select,
   Space,
-  Switch,
   Table,
   Tag,
   Typography,
@@ -39,10 +38,6 @@ interface ServerFormValues {
   dns_primary: string;
   dns_secondary: string;
   lease_minutes: number;
-  expired_keep_hours: number;
-  check_ip: boolean;
-  relay_only: boolean;
-  assoc_interface: string;
   custom_options: CustomOptionRow[];
 }
 
@@ -108,10 +103,6 @@ export default function DhcpServersPage() {
         dns_primary: record.dns_primary,
         dns_secondary: record.dns_secondary,
         lease_minutes: record.lease_minutes,
-        expired_keep_hours: record.expired_keep_hours,
-        check_ip: record.check_ip,
-        relay_only: record.relay_only,
-        assoc_interface: record.assoc_interface || 'all',
         custom_options: record.custom_options.map((o) => ({ code: o.code, value: o.value })),
       });
     } else {
@@ -119,10 +110,6 @@ export default function DhcpServersPage() {
       form.setFieldsValue({
         exclude_text: '',
         lease_minutes: 120,
-        expired_keep_hours: 0,
-        check_ip: true,
-        relay_only: false,
-        assoc_interface: 'all',
         custom_options: [],
       });
     }
@@ -151,10 +138,6 @@ export default function DhcpServersPage() {
         dns_secondary: v.dns_secondary,
         lease_minutes: v.lease_minutes,
         exclude,
-        expired_keep_hours: v.expired_keep_hours,
-        check_ip: v.check_ip,
-        relay_only: v.relay_only,
-        assoc_interface: v.assoc_interface || 'all',
         custom_options,
       };
       if (editing) {
@@ -258,12 +241,6 @@ export default function DhcpServersPage() {
       dataIndex: 'lease_minutes',
       width: 90,
       render: (v: number) => `${v} 分`,
-    },
-    {
-      title: '过期地址保留时间',
-      dataIndex: 'expired_keep_hours',
-      width: 140,
-      render: (v: number) => `${v} 时`,
     },
     { title: '剩余地址', dataIndex: 'remaining', width: 90 },
     {
@@ -399,6 +376,10 @@ export default function DhcpServersPage() {
               placeholder="请选择接口"
               options={interfaces.map((i) => ({ label: i.name, value: i.name }))}
               showSearch
+              onChange={(name: string) => {
+                const it = interfaces.find((x) => x.name === name);
+                if (it) form.setFieldValue('netmask', it.netmask);
+              }}
             />
           </Form.Item>
           <Form.Item
@@ -424,9 +405,9 @@ export default function DhcpServersPage() {
           <Form.Item
             label="子网掩码"
             name="netmask"
-            rules={[{ required: true, message: '请输入子网掩码' }]}
+            extra="由所选接口自动带出：dnsmasq 的 DHCP 池掩码即接口掩码，无法独立设置。如需更换网段，请到「内外网设置」修改接口 IP/掩码。"
           >
-            <Input placeholder="例如 255.255.255.0" />
+            <Input placeholder="选择接口后自动带出" readOnly />
           </Form.Item>
           <Form.Item
             label="网关"
@@ -448,19 +429,6 @@ export default function DhcpServersPage() {
           >
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
-          <Form.Item label="过期地址保留时间（小时）" name="expired_keep_hours">
-            <InputNumber min={0} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item label="检查接口IP有效性" name="check_ip" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-          <Form.Item label="只应用于DHCP中继" name="relay_only" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-          <Form.Item label="关联接口" name="assoc_interface">
-            <Input placeholder="all" />
-          </Form.Item>
-
           <Typography.Text strong>自定义DHCP选项</Typography.Text>
           <Form.List name="custom_options">
             {(fields, { add, remove }) => (

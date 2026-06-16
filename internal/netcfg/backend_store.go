@@ -291,8 +291,7 @@ func seedState() State {
 			ID: "dhcp_seedlan", Interface: "lan", Enabled: true,
 			IPStart: "192.168.1.100", IPEnd: "192.168.1.200", Netmask: "255.255.255.0",
 			Gateway: "192.168.1.1", DNSPrimary: "223.5.5.5", DNSSecondary: "114.114.114.114",
-			LeaseMinutes: 120, Exclude: []string{}, ExpiredKeepHours: 0, CheckIP: true,
-			RelayOnly: false, AssocInterface: "all", CustomOptions: []CustomOption{},
+			LeaseMinutes: 120, Exclude: []string{}, CustomOptions: []CustomOption{},
 		}},
 		Statics: []StaticLease{{
 			ID: "host_seed1", Hostname: "demo-pc", IP: "192.168.1.50", MAC: "AA:BB:CC:00:00:01",

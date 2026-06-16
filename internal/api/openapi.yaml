@@ -597,10 +597,6 @@ components:
         exclude:
           type: array
           items: { type: string }
-        expired_keep_hours: { type: integer }
-        check_ip: { type: boolean }
-        relay_only: { type: boolean }
-        assoc_interface: { type: string }
         custom_options:
           type: array
           items: { $ref: "#/components/schemas/CustomOption" }

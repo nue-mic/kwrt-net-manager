@@ -3,6 +3,7 @@ package netcfg
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -92,29 +93,108 @@ func (b *uciBackend) DNSServiceInfo() (DNSSvcInfo, error) {
 	}, nil
 }
 
-// InstallDoH 一键安装 https-dns-proxy（按 opkg/apk 分支）。失败时把 opkg/apk 的真实
-// 报错归纳成可读提示返回，便于区分「网络/软件源不可达」等环境问题。
+// 要安装的 DoH 组件包名。
+const dohPkgs = "https-dns-proxy luci-app-https-dns-proxy"
+
+// InstallDoH 一键安装 https-dns-proxy。先用机器现有源；若失败（最常见是默认镜像不可达/SSL 坏，
+// 与本包无关），按 /etc/os-release 推导「国内镜像(USTC) → 官方源」依次写一次性临时源重试，装完即删，
+// 绝不改用户 distfeeds。国内优先：官方 downloads.* 在国内常极慢甚至超时（实测 15s 仅拉到 32KB），
+// USTC 实测 <1s —— 分组逐个尝试，任一成功即止，最大化「不同环境都能装上」。
 func (b *uciBackend) InstallDoH() (string, error) {
-	var cmd string
-	switch b.pkgManager() {
-	case "apk":
-		cmd = "apk update; apk add https-dns-proxy luci-app-https-dns-proxy"
-	case "opkg":
-		cmd = "opkg update; opkg install https-dns-proxy luci-app-https-dns-proxy"
-	default:
+	pm := b.pkgManager()
+	if pm != "opkg" && pm != "apk" {
 		return "", errors.New("未检测到 opkg/apk 包管理器，无法自动安装 DoH 组件")
 	}
-	out, err := b.run.Run("", "sh", "-c", cmd)
-	if err != nil {
-		return out, errors.New(dohInstallHint(out))
+	// 0) 先用机器现有源。
+	out, err := b.runPkgInstall(pm, "")
+	if err == nil {
+		return out, nil
 	}
-	return out, nil
+	logs := strings.TrimSpace(out)
+	// 1) 现有源失败 → 依次回退到国内/官方镜像，任一成功即返回。
+	groups := b.fallbackMirrorGroups(pm)
+	if len(groups) == 0 {
+		return logs, errors.New(dohInstallHint(out) + "（系统版本/架构未知，无法推导回退源）")
+	}
+	for _, g := range groups {
+		out2, err2 := b.runPkgInstall(pm, g.feed)
+		logs += "\n\n=== 默认源失败，已回退「" + g.name + "」重试 ===\n" + strings.TrimSpace(out2)
+		if err2 == nil {
+			return logs, nil
+		}
+	}
+	return logs, errors.New("默认源与全部回退镜像均安装失败：" + dohInstallHint(logs))
+}
+
+// runPkgInstall 安装 DoH 组件。feed 非空则先写为一次性临时源（装完即删），不动用户既有 distfeeds。
+func (b *uciBackend) runPkgInstall(pm, feed string) (string, error) {
+	updateInstall := "opkg update; opkg install " + dohPkgs
+	path := "/etc/opkg/zzz-kwrt-doh.conf"
+	if pm == "apk" {
+		updateInstall = "apk update; apk add " + dohPkgs
+		path = "/etc/apk/repositories.d/zzz-kwrt-doh.list"
+	}
+	if feed == "" {
+		return b.run.Run("", "sh", "-c", updateInstall)
+	}
+	cmd := "cat > " + path + " <<'KWRTFEED'\n" + feed + "KWRTFEED\n" +
+		updateInstall + "; rc=$?; rm -f " + path + "; exit $rc"
+	return b.run.Run("", "sh", "-c", cmd)
+}
+
+// fallbackMirror 一个回退镜像组：name 展示名，feed 已渲染好的临时源内容。
+type fallbackMirror struct{ name, feed string }
+
+// fallbackMirrorGroups 据 /etc/os-release 推导回退镜像组，顺序＝国内(USTC) 优先、官方兜底。
+// 镜像分发的是原始签名包，能通过 opkg check_signature。pm 取 "opkg" | "apk"。
+func (b *uciBackend) fallbackMirrorGroups(pm string) []fallbackMirror {
+	osr, _ := b.run.Run("", "cat", "/etc/os-release")
+	id := osReleaseField(osr, "ID")
+	ver := osReleaseField(osr, "VERSION_ID")
+	arch := osReleaseField(osr, "OPENWRT_ARCH")
+	if ver == "" || arch == "" || strings.EqualFold(ver, "snapshot") {
+		return nil // 仅支持正式版本；arch/版本缺失则放弃回退
+	}
+	distro := "openwrt"
+	if id == "immortalwrt" {
+		distro = "immortalwrt"
+	}
+	defs := []struct{ tag, name, root string }{
+		{"ustc", "国内镜像 USTC", fmt.Sprintf("https://mirrors.ustc.edu.cn/%s/releases/%s/packages/%s", distro, ver, arch)},
+		{"off", "官方源", fmt.Sprintf("https://downloads.%s.org/releases/%s/packages/%s", distro, ver, arch)},
+	}
+	out := make([]fallbackMirror, 0, len(defs))
+	for _, d := range defs {
+		var sb strings.Builder
+		for _, feed := range []string{"base", "packages", "luci"} {
+			if pm == "apk" {
+				fmt.Fprintf(&sb, "%s/%s\n", d.root, feed)
+			} else {
+				fmt.Fprintf(&sb, "src/gz kwrt_%s_%s %s/%s\n", d.tag, feed, d.root, feed)
+			}
+		}
+		out = append(out, fallbackMirror{name: d.name, feed: sb.String()})
+	}
+	return out
+}
+
+// osReleaseField 解析 /etc/os-release 的 KEY=value（去引号）。
+func osReleaseField(content, key string) string {
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, key+"=") {
+			return strings.Trim(strings.TrimPrefix(line, key+"="), "\"'")
+		}
+	}
+	return ""
 }
 
 // dohInstallHint 把 opkg/apk 输出归纳为一句可读原因。
 func dohInstallHint(out string) string {
 	lo := strings.ToLower(out)
 	switch {
+	case strings.Contains(lo, "could not lock") || strings.Contains(lo, "opkg.lock") || strings.Contains(lo, "resource temporarily unavailable"):
+		return "另一个软件安装/更新正在进行（opkg 被占用），请稍候再点一次"
 	case strings.Contains(lo, "ssl error") || strings.Contains(lo, "certificate") || strings.Contains(lo, "handshake"):
 		return "软件源 HTTPS 握手失败（多为缺 ca 证书或系统时间不对）：请更新 ca-bundle/ca-certificates 或校正系统时间后重试"
 	case strings.Contains(lo, "failed to download") || strings.Contains(lo, "wget returned") || strings.Contains(lo, "could not") || strings.Contains(lo, "resolve"):

@@ -92,15 +92,53 @@ func (b *uciBackend) DNSServiceInfo() (DNSSvcInfo, error) {
 	}, nil
 }
 
-// InstallDoH 一键安装 https-dns-proxy（按 opkg/apk 分支）。
+// InstallDoH 一键安装 https-dns-proxy（按 opkg/apk 分支）。失败时把 opkg/apk 的真实
+// 报错归纳成可读提示返回，便于区分「网络/软件源不可达」等环境问题。
 func (b *uciBackend) InstallDoH() (string, error) {
+	var cmd string
 	switch b.pkgManager() {
 	case "apk":
-		return b.run.Run("", "sh", "-c", "apk update; apk add https-dns-proxy luci-app-https-dns-proxy")
+		cmd = "apk update; apk add https-dns-proxy luci-app-https-dns-proxy"
 	case "opkg":
-		return b.run.Run("", "sh", "-c", "opkg update; opkg install https-dns-proxy luci-app-https-dns-proxy")
+		cmd = "opkg update; opkg install https-dns-proxy luci-app-https-dns-proxy"
+	default:
+		return "", errors.New("未检测到 opkg/apk 包管理器，无法自动安装 DoH 组件")
 	}
-	return "", errors.New("未检测到 opkg/apk 包管理器，无法自动安装 DoH 组件")
+	out, err := b.run.Run("", "sh", "-c", cmd)
+	if err != nil {
+		return out, errors.New(dohInstallHint(out))
+	}
+	return out, nil
+}
+
+// dohInstallHint 把 opkg/apk 输出归纳为一句可读原因。
+func dohInstallHint(out string) string {
+	lo := strings.ToLower(out)
+	switch {
+	case strings.Contains(lo, "ssl error") || strings.Contains(lo, "certificate") || strings.Contains(lo, "handshake"):
+		return "软件源 HTTPS 握手失败（多为缺 ca 证书或系统时间不对）：请更新 ca-bundle/ca-certificates 或校正系统时间后重试"
+	case strings.Contains(lo, "failed to download") || strings.Contains(lo, "wget returned") || strings.Contains(lo, "could not") || strings.Contains(lo, "resolve"):
+		return "无法连接软件源（网络/镜像不可达）：请确认路由器可访问 opkg 源后重试"
+	case strings.Contains(lo, "unknown package") || strings.Contains(lo, "not found"):
+		return "软件源里找不到 https-dns-proxy（包列表未更新成功，多为上面的网络/SSL 问题导致）"
+	default:
+		return "安装失败：" + lastNonEmptyLine(out)
+	}
+}
+
+// lastNonEmptyLine 取输出里最后一条非空行（截断到 200 字符）。
+func lastNonEmptyLine(out string) string {
+	lines := strings.Split(out, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		s := strings.TrimSpace(lines[i])
+		if s != "" {
+			if len(s) > 200 {
+				s = s[:200]
+			}
+			return s
+		}
+	}
+	return "（无输出）"
 }
 
 // filterAAAASupported 探测本机 dnsmasq 是否支持 --filter-AAAA（精简构建不支持）。

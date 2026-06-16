@@ -284,6 +284,7 @@ export interface NIC {
   role: '' | 'lan' | 'wan';
   rx_bytes: number;
   tx_bytes: number;
+  ip_addrs: string[] | null; // 该网卡全部地址（IPv4+IPv6，CIDR）
 }
 
 export interface NetIface {

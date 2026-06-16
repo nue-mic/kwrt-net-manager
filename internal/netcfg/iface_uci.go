@@ -21,6 +21,7 @@ func (b *uciBackend) NICs() ([]NIC, error) {
 		return []NIC{}, nil
 	}
 	bound := b.deviceToIface()
+	addrs := b.nicAddrs()
 	var out []NIC
 	for _, e := range entries {
 		name := e.Name()
@@ -45,10 +46,36 @@ func (b *uciBackend) NICs() ([]NIC, error) {
 		if r, ok := bound[name]; ok {
 			n.Bound, n.Role = r.iface, r.role
 		}
+		n.IPAddrs = addrs[name]
 		out = append(out, n)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
+}
+
+// nicAddrs 跑 `ip -o addr show`，返回 设备名 → [全部地址(CIDR)]（IPv4+IPv6，跳过本地回环）。
+// 行形如：`2: eth0    inet 192.168.1.12/24 brd ... scope global eth0\  ...`
+//
+//	`3: br-lan  inet6 fe80::.../64 scope link \  ...`
+func (b *uciBackend) nicAddrs() map[string][]string {
+	out := map[string][]string{}
+	res, err := b.run.Run("", "ip", "-o", "addr", "show")
+	if err != nil {
+		return out
+	}
+	for _, line := range strings.Split(res, "\n") {
+		f := strings.Fields(line)
+		// f[0]="2:" f[1]=dev f[2]="inet"|"inet6" f[3]=addr/plen
+		if len(f) < 4 || (f[2] != "inet" && f[2] != "inet6") {
+			continue
+		}
+		dev, cidr := f[1], f[3]
+		if dev == "lo" || strings.HasPrefix(cidr, "127.") || cidr == "::1/128" {
+			continue
+		}
+		out[dev] = append(out[dev], cidr)
+	}
+	return out
 }
 
 func nicKind(base, name string) string {

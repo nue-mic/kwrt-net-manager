@@ -15,6 +15,8 @@ type NIC struct {
 	Role    string `json:"role"`  // "lan" | "wan" | "" (from the bound interface)
 	RxBytes uint64 `json:"rx_bytes"`
 	TxBytes uint64 `json:"tx_bytes"`
+	// IPAddrs 是该网卡上的全部地址（IPv4+IPv6，CIDR 形式），来自 `ip -o addr show`。
+	IPAddrs []string `json:"ip_addrs"`
 }
 
 // NIC kinds.

@@ -1,29 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Card, Col, Row, Statistic, Tag, Typography, Space, Button, Empty } from 'antd';
 import {
-  GlobalOutlined,
-  ApartmentOutlined,
-  TeamOutlined,
-  PushpinOutlined,
-  NodeIndexOutlined,
-  RightOutlined,
-  ArrowUpOutlined,
-  ArrowDownOutlined,
-  ApiOutlined,
+  Card, Col, Row, Statistic, Tag, Typography, Space, Button, Empty, Progress, Table, Drawer, Descriptions,
+} from 'antd';
+import type { ColumnsType } from 'antd/es/table';
+import {
+  GlobalOutlined, ApartmentOutlined, TeamOutlined, PushpinOutlined, NodeIndexOutlined, RightOutlined,
+  ArrowUpOutlined, ArrowDownOutlined, ApiOutlined, ClusterOutlined, DesktopOutlined, WifiOutlined,
+  DatabaseOutlined, HddOutlined, ThunderboltOutlined, EyeOutlined, ReloadOutlined,
 } from '@ant-design/icons';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip as RTooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-} from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import PageCard from '../components/PageCard';
-import { useNetData } from '../hooks/useNetData';
 import client from '../api/client';
 import * as net from '../api/netcfg';
 
@@ -39,122 +27,175 @@ function fmtSpeed(bps: number): string {
   if (bps >= 1024) return (bps / 1024).toFixed(1) + ' KB/s';
   return Math.round(bps) + ' B/s';
 }
-
+function fmtBytes(n: number): string {
+  if (n >= 1024 ** 3) return (n / 1024 ** 3).toFixed(2) + ' GB';
+  if (n >= 1024 ** 2) return (n / 1024 ** 2).toFixed(1) + ' MB';
+  if (n >= 1024) return (n / 1024).toFixed(1) + ' KB';
+  return n + ' B';
+}
 function fmtUptime(sec: number): string {
   if (!sec || sec < 0) return '—';
-  const d = Math.floor(sec / 86400);
-  const h = Math.floor((sec % 86400) / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = Math.floor(sec % 60);
+  const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60);
   if (d > 0) return `${d} 天 ${h} 时 ${m} 分`;
   if (h > 0) return `${h} 时 ${m} 分 ${s} 秒`;
   return `${m} 分 ${s} 秒`;
 }
 
-// 实时上下行速率采样：每 3 秒拉一次 /system/network，按差值算速率，保留最近 windowN 个点。
-function useSpeedHistory(windowN = 80) {
+interface SysMetrics { cpu: number; mem: number; memUsed: number; memTotal: number; disk: number; diskUsed: number; diskTotal: number; uptime: number; }
+interface NicRate { up: number; down: number; }
+interface Conns { tcp: number; udp: number; byStatus: Record<string, number>; ownedTcp: number; ownedUdp: number; }
+
+// 全量实时轮询：网卡(含全部IP)+总览+在线设备+系统资源+连接数，每 intervalMs 刷新一次，
+// 并按 rx/tx 差值算每块网卡与总的实时速率（满足「物理连接区块实时刷新」）。
+function useDashboard(intervalMs = 4000) {
+  const [nics, setNics] = useState<net.NIC[]>([]);
+  const [ov, setOv] = useState<net.NetOverview>(EMPTY_OV);
+  const [leases, setLeases] = useState<net.Lease[]>([]);
+  const [sys, setSys] = useState<SysMetrics>({ cpu: 0, mem: 0, memUsed: 0, memTotal: 0, disk: 0, diskUsed: 0, diskTotal: 0, uptime: 0 });
+  const [conns, setConns] = useState<Conns>({ tcp: 0, udp: 0, byStatus: {}, ownedTcp: 0, ownedUdp: 0 });
+  const [rates, setRates] = useState<Record<string, NicRate>>({});
+  const [total, setTotal] = useState<NicRate>({ up: 0, down: 0 });
   const [series, setSeries] = useState<{ t: string; up: number; down: number }[]>([]);
-  const [rate, setRate] = useState({ up: 0, down: 0 });
-  const prev = useRef<{ sent: number; recv: number; t: number } | null>(null);
+  const [ts, setTs] = useState(0);
+  const prev = useRef<Record<string, { rx: number; tx: number }>>({});
+  const prevT = useRef<number>(0);
 
   useEffect(() => {
     let alive = true;
     const tick = async () => {
       try {
-        const data = await client.get('/api/v1/system/network').then((r) => r.data);
-        let sent = 0;
-        let recv = 0;
-        for (const it of data.items ?? []) {
-          sent += it.bytes_sent ?? 0;
-          recv += it.bytes_recv ?? 0;
-        }
+        const [nicList, ovData, leaseList, cpu, mem, disk, info, cs] = await Promise.all([
+          net.listNICs(),
+          net.getNetOverview(),
+          net.listLeases(),
+          client.get('/api/v1/system/cpu').then((r) => r.data).catch(() => ({})),
+          client.get('/api/v1/system/memory').then((r) => r.data).catch(() => ({})),
+          client.get('/api/v1/system/disk').then((r) => r.data).catch(() => ({})),
+          client.get('/api/v1/system/info').then((r) => r.data).catch(() => ({})),
+          client.get('/api/v1/system/connections').then((r) => r.data).catch(() => ({})),
+        ]);
+        if (!alive) return;
         const now = Date.now();
-        if (prev.current) {
-          const dt = (now - prev.current.t) / 1000;
-          if (dt > 0 && alive) {
-            const up = Math.max(0, (sent - prev.current.sent) / dt);
-            const down = Math.max(0, (recv - prev.current.recv) / dt);
-            setRate({ up, down });
-            const label = new Date().toLocaleTimeString('zh-CN', { hour12: false });
-            setSeries((arr) => [...arr, { t: label, up: +(up / 1024).toFixed(1), down: +(down / 1024).toFixed(1) }].slice(-windowN));
+        const dt = prevT.current ? (now - prevT.current) / 1000 : 0;
+        const nr: Record<string, NicRate> = {};
+        let tup = 0, tdown = 0;
+        for (const n of nicList) {
+          const p = prev.current[n.name];
+          if (p && dt > 0) {
+            const up = Math.max(0, (n.tx_bytes - p.tx) / dt);
+            const down = Math.max(0, (n.rx_bytes - p.rx) / dt);
+            nr[n.name] = { up, down };
+            // 总速率只统计 WAN/物理口，避免桥与成员口重复计数。
+            if (n.role === 'wan') { tup += up; tdown += down; }
+          }
+          prev.current[n.name] = { rx: n.rx_bytes, tx: n.tx_bytes };
+        }
+        // 无 WAN 角色时，退化为所有物理网卡之和。
+        if (tup === 0 && tdown === 0) {
+          for (const n of nicList) {
+            if (n.kind === 'physical' && nr[n.name]) { tup += nr[n.name].up; tdown += nr[n.name].down; }
           }
         }
-        prev.current = { sent, recv, t: now };
+        prevT.current = now;
+        setNics(nicList);
+        setOv(ovData);
+        setLeases(leaseList);
+        setRates(nr);
+        setTotal({ up: tup, down: tdown });
+        setSys({
+          cpu: cpu.usage_percent ?? 0,
+          mem: mem.used_percent ?? 0, memUsed: mem.used ?? 0, memTotal: mem.total ?? 0,
+          disk: disk.used_percent ?? disk.items?.[0]?.used_percent ?? 0,
+          diskUsed: disk.used ?? disk.items?.[0]?.used ?? 0, diskTotal: disk.total ?? disk.items?.[0]?.total ?? 0,
+          uptime: info?.host?.uptime_seconds ?? info?.uptime_s ?? 0,
+        });
+        setConns({
+          tcp: cs.tcp_total ?? 0, udp: cs.udp_total ?? 0, byStatus: cs.tcp_by_status ?? {},
+          ownedTcp: cs.owned_tcp_conns ?? 0, ownedUdp: cs.owned_udp_conns ?? 0,
+        });
+        if (dt > 0) {
+          const label = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+          setSeries((arr) => [...arr, { t: label, up: +(tup / 1024).toFixed(1), down: +(tdown / 1024).toFixed(1) }].slice(-80));
+        }
+        setTs(now);
       } catch {
         /* 静默 */
       }
     };
     void tick();
-    const id = setInterval(tick, 3000);
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
-  }, [windowN]);
+    const id = setInterval(tick, intervalMs);
+    return () => { alive = false; clearInterval(id); };
+  }, [intervalMs]);
 
-  return { series, rate };
+  return { nics, ov, leases, sys, conns, rates, total, series, ts };
 }
 
-// 主机运行时长：每 5 秒刷新一次 uptime。
-function useUptime() {
-  const [up, setUp] = useState(0);
+// 业务计数（变化较少）：每 15 秒刷新。
+function useCounts() {
+  const [c, setC] = useState({ servers: 0, serversOn: 0, statics: 0, routes: 0, routesOn: 0, poolFree: 0 });
   useEffect(() => {
     let alive = true;
     const tick = async () => {
       try {
-        const info = await client.get('/api/v1/system/info').then((r) => r.data);
-        if (alive) setUp(info?.host?.uptime_seconds ?? info?.uptime_s ?? 0);
-      } catch {
-        /* 静默 */
-      }
+        const [servers, statics, routes] = await Promise.all([net.listServers(), net.listStatics(), net.listRoutes()]);
+        if (!alive) return;
+        setC({
+          servers: servers.length, serversOn: servers.filter((s) => s.enabled).length,
+          statics: statics.items.length, routes: routes.length, routesOn: routes.filter((r) => r.enabled).length,
+          poolFree: servers.reduce((a, s) => a + (s.remaining || 0), 0),
+        });
+      } catch { /* 静默 */ }
     };
     void tick();
-    const id = setInterval(tick, 5000);
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
+    const id = setInterval(tick, 15000);
+    return () => { alive = false; clearInterval(id); };
   }, []);
-  return up;
+  return c;
+}
+
+const nicIcon = (k: string): ReactNode =>
+  k === 'wifi' ? <WifiOutlined /> : k === 'bridge' ? <ClusterOutlined /> : k === 'physical' ? <ApiOutlined /> : <GlobalOutlined />;
+
+function roleTag(n: net.NIC) {
+  if (n.role === 'wan') return <Tag color="blue">WAN</Tag>;
+  if (n.role === 'lan') return <Tag color="green">LAN</Tag>;
+  const m: Record<string, string> = { bridge: '桥接', physical: '物理', wifi: '无线', vlan: 'VLAN', virtual: '虚拟' };
+  return <Tag>{m[n.kind] ?? n.kind}</Tag>;
 }
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<net.NetStatus | null>(null);
-  const { series, rate } = useSpeedHistory();
-  const uptime = useUptime();
+  const [connOpen, setConnOpen] = useState(false);
+  const { nics, ov, leases, sys, conns, rates, total, series, ts } = useDashboard();
+  const counts = useCounts();
 
-  useEffect(() => {
-    net.getStatus().then(setStatus).catch(() => {});
-  }, []);
+  useEffect(() => { net.getStatus().then(setStatus).catch(() => {}); }, []);
 
-  const { data } = useNetData(async () => {
-    const [ov, servers, statics, routes] = await Promise.all([
-      net.getNetOverview(),
-      net.listServers(),
-      net.listStatics(),
-      net.listRoutes(),
-    ]);
-    return {
-      ov,
-      poolFree: servers.reduce((a, s) => a + (s.remaining || 0), 0),
-      servers: servers.length,
-      serversOn: servers.filter((s) => s.enabled).length,
-      statics: statics.items.length,
-      routes: routes.length,
-      routesOn: routes.filter((r) => r.enabled).length,
-    };
-  }, { ov: EMPTY_OV, poolFree: 0, servers: 0, serversOn: 0, statics: 0, routes: 0, routesOn: 0 });
+  const online = ov.wan_up > 0 || ov.lan_up > 0;
+  const wanIPs = useMemo(
+    () => nics.filter((n) => n.role === 'wan').flatMap((n) => (n.ip_addrs ?? []).filter((a) => a.includes('.'))),
+    [nics],
+  );
+  // 展示用网卡：有角色 / 有 IP / 物理·桥·无线（过滤掉无意义的纯虚拟口）。
+  const showNics = useMemo(
+    () => nics.filter((n) => n.role || (n.ip_addrs && n.ip_addrs.length) || ['physical', 'bridge', 'wifi'].includes(n.kind)),
+    [nics],
+  );
 
-  const ov = data.ov;
-  const wanOnline = ov.wan_up > 0;
-  const online = wanOnline || ov.lan_up > 0;
-
-  const quick: { title: string; value: number; sub: string; icon: ReactNode; color: string; to: string }[] = [
-    { title: 'DHCP 服务端', value: data.servers, sub: `${data.serversOn} 个已启用`, icon: <ApartmentOutlined />, color: '#1f6fb2', to: '/dhcp/servers' },
+  const quick = [
+    { title: 'DHCP 服务端', value: counts.servers, sub: `${counts.serversOn} 个已启用`, icon: <ApartmentOutlined />, color: '#1f6fb2', to: '/dhcp/servers' },
     { title: '活动终端', value: ov.terminals, sub: '在线设备', icon: <TeamOutlined />, color: '#52c41a', to: '/dhcp/leases' },
-    { title: '静态分配', value: data.statics, sub: 'IP-MAC 绑定', icon: <PushpinOutlined />, color: '#722ed1', to: '/dhcp/statics' },
-    { title: '静态路由', value: data.routes, sub: `${data.routesOn} 条已启用`, icon: <NodeIndexOutlined />, color: '#fa8c16', to: '/routes' },
+    { title: '静态分配', value: counts.statics, sub: 'IP-MAC 绑定', icon: <PushpinOutlined />, color: '#722ed1', to: '/dhcp/statics' },
+    { title: '静态路由', value: counts.routes, sub: `${counts.routesOn} 条已启用`, icon: <NodeIndexOutlined />, color: '#fa8c16', to: '/routes' },
+  ];
+
+  const leaseCols: ColumnsType<net.Lease> = [
+    { title: '主机名称', dataIndex: 'hostname', render: (v: string) => v || '-', ellipsis: true },
+    { title: 'IP', dataIndex: 'ip', width: 130 },
+    { title: 'MAC', dataIndex: 'mac', width: 150, responsive: ['lg'] },
+    { title: '接口', dataIndex: 'interface', width: 70, responsive: ['md'], render: (v: string) => v || '-' },
+    { title: '状态', dataIndex: 'static', width: 90, render: (v: boolean) => (v ? <Tag color="success">静态</Tag> : <Tag color="processing">动态</Tag>) },
   ];
 
   return (
@@ -162,73 +203,120 @@ export default function Dashboard() {
       breadcrumb={['总览', '系统概况']}
       title="系统概况"
       extra={
-        status && (
-          <Space>
-            <Text type="secondary">后端</Text>
-            <Tag color={status.backend === 'uci' ? 'blue' : 'default'}>{status.backend === 'uci' ? 'OpenWrt UCI' : '模拟(store)'}</Tag>
-            <Tag color={status.dhcp_ok ? 'success' : 'error'}>{status.dhcp_ok ? 'DHCP 正常' : 'DHCP 异常'}</Tag>
-            {status.pending && <Tag color="warning">有未生效变更</Tag>}
-          </Space>
-        )
+        <Space>
+          {ts > 0 && <Text type="secondary" style={{ fontSize: 12 }}><ReloadOutlined spin style={{ marginRight: 4 }} />实时</Text>}
+          {status && (
+            <>
+              <Tag color={status.backend === 'uci' ? 'blue' : 'default'}>{status.backend === 'uci' ? 'OpenWrt UCI' : '模拟(store)'}</Tag>
+              <Tag color={status.dhcp_ok ? 'success' : 'error'}>{status.dhcp_ok ? 'DHCP 正常' : 'DHCP 异常'}</Tag>
+              {status.pending && <Tag color="warning">有未生效变更</Tag>}
+            </>
+          )}
+        </Space>
       }
     >
-      {/* 第一行：连接状态 / 速率 / 物理连接 */}
+      {/* 第一行：连接状态 / 系统资源 / 实时速率+连接数 */}
       <Row gutter={[16, 16]}>
-        <Col xs={24} md={8}>
-          <Card style={{ background: online ? 'linear-gradient(135deg,#3aab73,#52c41a)' : '#8c8c8c', color: '#fff', height: '100%' }} styles={{ body: { padding: 20 } }}>
-            <Space direction="vertical" size={2}>
-              <Space><GlobalOutlined style={{ fontSize: 18 }} /><Text style={{ color: 'rgba(255,255,255,0.92)' }}>{wanOnline ? '外网' : ov.wan_count > 0 ? '外网' : '内网'}</Text></Space>
-              <Text style={{ color: '#fff', fontSize: 30, fontWeight: 700, lineHeight: 1.2 }}>
-                {online ? '已连接' : ov.wan_count > 0 ? '未连接' : '运行中'}
-              </Text>
-              <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12 }}>已运行 {fmtUptime(uptime)}</Text>
+        <Col xs={24} lg={8}>
+          <Card style={{ background: online ? 'linear-gradient(135deg,#3aab73,#52c41a)' : 'linear-gradient(135deg,#8c8c8c,#bfbfbf)', color: '#fff', height: '100%' }} styles={{ body: { padding: 20 } }}>
+            <Space direction="vertical" size={4} style={{ width: '100%' }}>
+              <Space><GlobalOutlined style={{ fontSize: 18 }} /><Text style={{ color: 'rgba(255,255,255,0.92)' }}>外网</Text></Space>
+              <Text style={{ color: '#fff', fontSize: 30, fontWeight: 700, lineHeight: 1.2 }}>{online ? '已连接' : '未连接'}</Text>
+              <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12 }}>已运行 {fmtUptime(sys.uptime)}</Text>
+              {wanIPs.length > 0 && (
+                <Text style={{ color: 'rgba(255,255,255,0.95)', fontSize: 13 }}>出口 IP：{wanIPs.join('、')}</Text>
+              )}
             </Space>
           </Card>
         </Col>
-        <Col xs={24} md={8}>
-          <Card title="速率状态" size="small" style={{ height: '100%' }}>
-            <Space direction="vertical" size={10} style={{ width: '100%' }}>
-              <Space size={8}><ArrowUpOutlined style={{ color: '#cf1322' }} /><Text type="secondary">上行</Text><Text strong style={{ fontSize: 18 }}>{fmtSpeed(rate.up)}</Text></Space>
-              <Space size={8}><ArrowDownOutlined style={{ color: '#1f6fb2' }} /><Text type="secondary">下行</Text><Text strong style={{ fontSize: 18 }}>{fmtSpeed(rate.down)}</Text></Space>
+        <Col xs={24} lg={8}>
+          <Card title="系统资源" size="small" style={{ height: '100%' }}>
+            <Space direction="vertical" size={6} style={{ width: '100%' }}>
+              <ResLine icon={<ThunderboltOutlined />} label="CPU" pct={sys.cpu} text={`${sys.cpu.toFixed(1)}%`} />
+              <ResLine icon={<DatabaseOutlined />} label="内存" pct={sys.mem} text={sys.memTotal ? `${fmtBytes(sys.memUsed)} / ${fmtBytes(sys.memTotal)}` : `${sys.mem.toFixed(0)}%`} />
+              <ResLine icon={<HddOutlined />} label="磁盘" pct={sys.disk} text={sys.diskTotal ? `${fmtBytes(sys.diskUsed)} / ${fmtBytes(sys.diskTotal)}` : `${sys.disk.toFixed(0)}%`} />
             </Space>
           </Card>
         </Col>
-        <Col xs={24} md={8}>
-          <Card title="物理连接" size="small" style={{ height: '100%' }}>
-            <Space size="large" wrap>
-              <Statistic title="连接设备" value={ov.terminals} />
-              <Statistic title="连接数" value={ov.connections} />
-              <div>
-                <div style={{ fontSize: 13 }}>有线：{ov.terminals}</div>
-                <div style={{ fontSize: 13, color: '#999' }}>无线：0</div>
-              </div>
-            </Space>
+        <Col xs={24} lg={8}>
+          <Card title="实时速率 / 连接" size="small" style={{ height: '100%' }} extra={<Button type="link" size="small" icon={<EyeOutlined />} onClick={() => setConnOpen(true)}>连接详情</Button>}>
+            <Row gutter={8}>
+              <Col span={12}>
+                <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                  <Space size={8}><ArrowUpOutlined style={{ color: '#cf1322' }} /><Text type="secondary">上行</Text><Text strong>{fmtSpeed(total.up)}</Text></Space>
+                  <Space size={8}><ArrowDownOutlined style={{ color: '#1f6fb2' }} /><Text type="secondary">下行</Text><Text strong>{fmtSpeed(total.down)}</Text></Space>
+                </Space>
+              </Col>
+              <Col span={12}>
+                <Statistic title="活动连接数" value={conns.tcp + conns.udp} valueStyle={{ fontSize: 22 }} />
+                <Text type="secondary" style={{ fontSize: 12 }}>TCP {conns.tcp} · UDP {conns.udp}</Text>
+              </Col>
+            </Row>
           </Card>
         </Col>
       </Row>
 
-      {/* 第二行：接口状态 */}
-      <Card title="接口状态" size="small" style={{ marginTop: 16 }} extra={<Button type="link" size="small" onClick={() => navigate('/net')}>内外网设置 <RightOutlined /></Button>}>
-        <Row gutter={[16, 16]} align="middle">
-          <Col xs={24} md={8}>
-            <Space size="large" wrap>
-              <Statistic title="WAN 已启用" value={ov.wan_count} prefix={<GlobalOutlined style={{ color: '#1f6fb2' }} />} />
-              <Statistic title="LAN 已启用" value={ov.lan_count} prefix={<ApartmentOutlined style={{ color: '#52c41a' }} />} />
-              <Statistic title="DHCP 池剩余" value={data.poolFree} />
-            </Space>
-          </Col>
-          <Col xs={24} md={16}>
-            <Space wrap size={[12, 12]}>
-              {ov.wans.map((w) => <PortMini key={w.id} title={w.name} up={w.up} color="#1f6fb2" icon={<GlobalOutlined />} onClick={() => navigate('/net')} />)}
-              {ov.lans.map((l) => <PortMini key={l.id} title={l.name} up={l.up} color="#52c41a" icon={<ApartmentOutlined />} onClick={() => navigate('/net')} />)}
-              {ov.wan_count + ov.lan_count === 0 && <Text type="secondary" style={{ fontSize: 12 }}>暂无接口</Text>}
-            </Space>
-          </Col>
-        </Row>
+      {/* 第二行：网卡 / 物理连接（含全部 IP + 实时速率，自动刷新） */}
+      <Card
+        title={<Space><ClusterOutlined />物理连接 / 网卡</Space>}
+        size="small"
+        style={{ marginTop: 16 }}
+        extra={
+          <Space size="large">
+            <Text type="secondary" style={{ fontSize: 12 }}>连接设备 {ov.terminals} · 连接数 {conns.tcp + conns.udp}</Text>
+            <Button type="link" size="small" onClick={() => navigate('/nics')}>网卡列表 <RightOutlined /></Button>
+          </Space>
+        }
+      >
+        {showNics.length === 0 ? (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="正在加载网卡…" />
+        ) : (
+          <Row gutter={[12, 12]}>
+            {showNics.map((n) => {
+              const r = rates[n.name];
+              const ips = n.ip_addrs ?? [];
+              return (
+                <Col xs={24} sm={12} xl={8} key={n.name}>
+                  <Card size="small" hoverable onClick={() => navigate('/nics')} styles={{ body: { padding: 12 } }}
+                    style={{ borderLeft: `3px solid ${n.up ? (n.role === 'wan' ? '#1f6fb2' : '#52c41a') : '#d9d9d9'}` }}>
+                    <Space style={{ justifyContent: 'space-between', width: '100%' }} align="start">
+                      <Space size={6}>
+                        <span style={{ fontSize: 16, color: n.up ? '#1f6fb2' : '#bfbfbf' }}>{nicIcon(n.kind)}</span>
+                        <Text strong>{n.name}</Text>
+                        {roleTag(n)}
+                      </Space>
+                      <Tag color={n.up ? 'success' : 'default'} style={{ marginInlineEnd: 0 }}>{n.up ? '已连接' : '未连接'}</Tag>
+                    </Space>
+                    <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>
+                      {n.up && n.speed_mb > 0 ? `${n.speed_mb >= 1000 ? n.speed_mb / 1000 + ' Gbps' : n.speed_mb + ' Mbps'}${n.duplex ? ' · ' + (n.duplex === 'full' ? '全双工' : '半双工') : ''}` : '链路速率未知'}
+                      {n.mac ? ` · ${n.mac}` : ''}
+                    </div>
+                    <div style={{ marginTop: 6 }}>
+                      {ips.length === 0 ? (
+                        <Text type="secondary" style={{ fontSize: 12 }}>无 IP 地址</Text>
+                      ) : (
+                        <Space size={[6, 4]} wrap>
+                          {ips.map((ip) => (
+                            <Tag key={ip} color={ip.includes('.') ? 'geekblue' : 'purple'} style={{ marginInlineEnd: 0, fontFamily: 'monospace' }}>{ip}</Tag>
+                          ))}
+                        </Space>
+                      )}
+                    </div>
+                    <div style={{ marginTop: 8, display: 'flex', gap: 16, fontSize: 12 }}>
+                      <span><ArrowUpOutlined style={{ color: '#cf1322' }} /> {fmtSpeed(r?.up ?? 0)}</span>
+                      <span><ArrowDownOutlined style={{ color: '#1f6fb2' }} /> {fmtSpeed(r?.down ?? 0)}</span>
+                      <span style={{ color: '#bbb' }}>累计 ↑{fmtBytes(n.tx_bytes)} ↓{fmtBytes(n.rx_bytes)}</span>
+                    </div>
+                  </Card>
+                </Col>
+              );
+            })}
+          </Row>
+        )}
       </Card>
 
-      {/* 第三行：近 4 分钟上下行速率 */}
-      <Card title="近 4 分钟上下行速率（KB/s）" size="small" style={{ marginTop: 16 }}>
+      {/* 第三行：实时流量曲线 */}
+      <Card title="实时上下行速率（KB/s）" size="small" style={{ marginTop: 16 }}>
         {series.length < 2 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="正在采样…" style={{ padding: 24 }} />
         ) : (
@@ -249,7 +337,25 @@ export default function Dashboard() {
         )}
       </Card>
 
-      {/* 第四行：业务快捷入口 */}
+      {/* 第四行：在线设备（实时，可点击查看） */}
+      <Card
+        title={<Space><DesktopOutlined />在线设备（{leases.length}）</Space>}
+        size="small"
+        style={{ marginTop: 16 }}
+        extra={<Button type="link" size="small" onClick={() => navigate('/dhcp/leases')}>查看全部 <RightOutlined /></Button>}
+      >
+        <Table
+          rowKey={(r) => r.ip}
+          size="small"
+          dataSource={leases.slice(0, 8)}
+          columns={leaseCols}
+          pagination={false}
+          onRow={(r) => ({ style: { cursor: 'pointer' }, onClick: () => navigate(r.static ? `/dhcp/statics?q=${encodeURIComponent(r.ip)}` : '/dhcp/leases') })}
+          locale={{ emptyText: '暂无在线设备' }}
+        />
+      </Card>
+
+      {/* 第五行：业务快捷入口 */}
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         {quick.map((c) => (
           <Col xs={24} sm={12} xl={6} key={c.title}>
@@ -266,19 +372,44 @@ export default function Dashboard() {
           </Col>
         ))}
       </Row>
+
+      {/* 连接详情抽屉 */}
+      <Drawer title="连接详情" width={420} open={connOpen} onClose={() => setConnOpen(false)}>
+        <Descriptions column={1} bordered size="small">
+          <Descriptions.Item label="TCP 连接总数">{conns.tcp}</Descriptions.Item>
+          <Descriptions.Item label="UDP 连接总数">{conns.udp}</Descriptions.Item>
+          <Descriptions.Item label="本工具占用">TCP {conns.ownedTcp} · UDP {conns.ownedUdp}</Descriptions.Item>
+        </Descriptions>
+        <Typography.Paragraph type="secondary" style={{ margin: '16px 0 8px' }}>TCP 按状态分布</Typography.Paragraph>
+        {Object.keys(conns.byStatus).length === 0 ? (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="无数据" />
+        ) : (
+          <Space direction="vertical" style={{ width: '100%' }} size={6}>
+            {Object.entries(conns.byStatus).sort((a, b) => b[1] - a[1]).map(([k, v]) => (
+              <div key={k} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Tag color={k === 'ESTABLISHED' ? 'success' : k === 'LISTEN' ? 'blue' : 'default'}>{k}</Tag>
+                <Text strong>{v}</Text>
+              </div>
+            ))}
+          </Space>
+        )}
+        <Typography.Paragraph type="secondary" style={{ marginTop: 16, fontSize: 12 }}>
+          数据来自本机 TCP/UDP 套接字统计（gopsutil），每 4 秒刷新。
+        </Typography.Paragraph>
+      </Drawer>
     </PageCard>
   );
 }
 
-function PortMini({ title, up, color, icon, onClick }: { title: string; up: boolean; color: string; icon: ReactNode; onClick?: () => void }) {
+function ResLine({ icon, label, pct, text }: { icon: ReactNode; label: string; pct: number; text: string }) {
+  const color = pct >= 90 ? '#cf1322' : pct >= 70 ? '#fa8c16' : '#52c41a';
   return (
-    <Card size="small" hoverable onClick={onClick} style={{ width: 104, textAlign: 'center', borderColor: up ? color : '#d9d9d9', cursor: 'pointer' }} styles={{ body: { padding: '8px 4px' } }}>
-      <div style={{ fontSize: 20, color: up ? color : '#bfbfbf', position: 'relative' }}>
-        {up ? <ApiOutlined style={{ position: 'absolute', top: -4, right: 18, fontSize: 11, color }} /> : null}
-        {icon}
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 2 }}>
+        <Space size={4}>{icon}<Text type="secondary">{label}</Text></Space>
+        <Text style={{ fontSize: 12 }}>{text}</Text>
       </div>
-      <div style={{ fontWeight: 600, fontSize: 13, marginTop: 2 }}>{title}</div>
-      <Text type="secondary" style={{ fontSize: 11 }}>{up ? '已连接' : '未连接'}</Text>
-    </Card>
+      <Progress percent={Math.round(pct)} showInfo={false} strokeColor={color} size="small" />
+    </div>
   );
 }

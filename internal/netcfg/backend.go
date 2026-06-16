@@ -59,6 +59,22 @@ type Backend interface {
 	// "disconnect" (ifdown) or "restart".
 	WANAction(id, action string) error
 
+	// ---- DNS（爱快 DNS 设置 / 自定义解析 / 域名分流 / DoH） ----
+
+	DNSSettings() (DNSSettings, error)
+	SaveDNSSettings(DNSSettings) error
+	DNSDoH() (DNSDoH, error)
+	SaveDNSDoH(DNSDoH) error
+	DNSRecords() ([]DNSRecord, error)
+	SaveDNSRecords([]DNSRecord) error
+	DNSDomainRoutes() ([]DNSDomainRoute, error)
+	SaveDNSDomainRoutes([]DNSDomainRoute) error
+	// 只读运行态 / 探测 / 维护。
+	DNSCacheStats() (DNSCacheStats, error)
+	FlushDNSCache() error
+	DNSServiceInfo() (DNSSvcInfo, error)
+	InstallDoH() (string, error)
+
 	// DHCPServiceInfo reports which DHCP daemon is installed/running.
 	DHCPServiceInfo() (DHCPSvcInfo, error)
 	// InstallDHCP installs dnsmasq (一键安装) via the system package manager,

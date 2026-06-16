@@ -335,6 +335,17 @@ func seedState() State {
 		},
 	}
 	st.WANv6s, st.LANv6s, st.PrefixStaticsV6, st.ACLv6 = seedIPv6()
+	st.DNS = DNSSettings{
+		Enabled: true, DNSPrimary: "223.5.5.5", DNSSecondary: "114.114.114.114",
+		NoResolv: false, FilterAAAA: false, CacheSize: 8000, MinCacheTTL: 0, LocalTTL: 0,
+	}
+	st.DNSRecords = []DNSRecord{
+		{ID: "dns_seed1", Domain: "nas.lan", RecordType: DNSRecordA, Address: "192.168.1.50", Remark: "示例：内网 NAS", Enabled: true, Managed: true},
+		{ID: "dns_seed2", Domain: "*.demo.lan", RecordType: DNSRecordA, Address: "192.168.1.100", Wildcard: true, Remark: "示例：通配解析", Enabled: true, Managed: true},
+	}
+	st.DNSDomainRoutes = []DNSDomainRoute{
+		{ID: "dnsr_seed1", Domain: "example.com", Server: "8.8.8.8", Remark: "示例：指定域走 8.8.8.8", Enabled: true, Managed: true},
+	}
 	return st
 }
 

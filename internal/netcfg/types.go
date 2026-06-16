@@ -175,6 +175,11 @@ type State struct {
 	LANv6s          []LANv6          `json:"lan_v6,omitempty"`
 	PrefixStaticsV6 []PrefixStaticV6 `json:"prefix_statics_v6,omitempty"`
 	ACLv6           ACLv6            `json:"acl_v6,omitempty"`
+	// DNS（爱快 DNS 设置 / 多线路DNS 的 OpenWrt 落地）。
+	DNS             DNSSettings      `json:"dns,omitempty"`
+	DNSDoH          DNSDoH           `json:"dns_doh,omitempty"`
+	DNSRecords      []DNSRecord      `json:"dns_records,omitempty"`
+	DNSDomainRoutes []DNSDomainRoute `json:"dns_domain_routes,omitempty"`
 }
 
 // CloneState returns a deep copy of s (slices are freshly allocated).
@@ -199,5 +204,23 @@ func CloneState(s State) State {
 	}
 	out.PrefixStaticsV6 = append([]PrefixStaticV6(nil), s.PrefixStaticsV6...)
 	out.ACLv6 = ACLv6{Mode: s.ACLv6.Mode, Entries: append([]ACLv6Entry(nil), s.ACLv6.Entries...)}
+	out.DNS = s.DNS
+	out.DNS.SavedStock = cloneStrMap(s.DNS.SavedStock)
+	out.DNS.PrevServers = append([]string(nil), s.DNS.PrevServers...)
+	out.DNS.PrevAddrs = append([]string(nil), s.DNS.PrevAddrs...)
+	out.DNSDoH = s.DNSDoH
+	out.DNSRecords = append([]DNSRecord(nil), s.DNSRecords...)
+	out.DNSDomainRoutes = append([]DNSDomainRoute(nil), s.DNSDomainRoutes...)
+	return out
+}
+
+func cloneStrMap(m map[string]string) map[string]string {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
 	return out
 }

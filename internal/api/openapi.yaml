@@ -678,3 +678,61 @@ components:
         netmask: { type: string }
         gateway: { type: string }
         metric: { type: integer }
+    DNSSettings:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        dns_primary: { type: string }
+        dns_secondary: { type: string }
+        no_resolv: { type: boolean }
+        filter_aaaa: { type: boolean }
+        cache_size: { type: integer }
+        local_ttl: { type: integer }
+        min_cache_ttl: { type: integer }
+        max_cache_ttl: { type: integer }
+        force_proxy: { type: boolean }
+    DNSDoH:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        resolver_url: { type: string }
+        listen_port: { type: integer }
+        bootstrap_dns: { type: string }
+    DNSRecord:
+      type: object
+      properties:
+        id: { type: string }
+        domain: { type: string }
+        record_type: { type: string, enum: [A, AAAA] }
+        address: { type: string }
+        wildcard: { type: boolean }
+        src_ip_scope: { type: string }
+        remark: { type: string }
+        enabled: { type: boolean }
+    DNSDomainRoute:
+      type: object
+      properties:
+        id: { type: string }
+        domain: { type: string }
+        server: { type: string }
+        out_iface: { type: string }
+        remark: { type: string }
+        enabled: { type: boolean }
+    DNSCacheStats:
+      type: object
+      properties:
+        supported: { type: boolean }
+        cache_size: { type: integer }
+        insertions: { type: integer }
+        evictions: { type: integer }
+        hits: { type: integer }
+        misses: { type: integer }
+        hit_ratio: { type: number }
+    DNSSvcInfo:
+      type: object
+      properties:
+        backend: { type: string }
+        filter_aaaa_supported: { type: boolean }
+        doh_installed: { type: boolean }
+        pkg_manager: { type: string }
+        can_install: { type: boolean }

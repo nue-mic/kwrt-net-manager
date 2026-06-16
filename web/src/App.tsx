@@ -13,6 +13,10 @@ const DhcpLeases = lazy(() => import('./pages/DhcpLeases'));
 const DhcpAcl = lazy(() => import('./pages/DhcpAcl'));
 const RoutesPage = lazy(() => import('./pages/Routes'));
 const RouteTable = lazy(() => import('./pages/RouteTable'));
+const DnsSettings = lazy(() => import('./pages/dns/DnsSettings'));
+const DnsCacheStatus = lazy(() => import('./pages/dns/DnsCacheStatus'));
+const DnsRecords = lazy(() => import('./pages/dns/DnsRecords'));
+const DnsDomainRoutes = lazy(() => import('./pages/dns/DnsDomainRoutes'));
 const Ipv6Settings = lazy(() => import('./pages/ipv6/Ipv6Settings'));
 const Ipv6LineDetail = lazy(() => import('./pages/ipv6/Ipv6LineDetail'));
 const Ipv6Leases = lazy(() => import('./pages/ipv6/Ipv6Leases'));
@@ -54,6 +58,14 @@ function App() {
 
             <Route path="routes" element={<RoutesPage />} />
             <Route path="route-table" element={<RouteTable />} />
+
+            <Route path="dns">
+              <Route index element={<Navigate to="/dns/settings" replace />} />
+              <Route path="settings" element={<DnsSettings />} />
+              <Route path="cache" element={<DnsCacheStatus />} />
+              <Route path="records" element={<DnsRecords />} />
+              <Route path="domain-routes" element={<DnsDomainRoutes />} />
+            </Route>
 
             <Route path="ipv6">
               <Route index element={<Navigate to="/ipv6/settings" replace />} />

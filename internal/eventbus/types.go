@@ -26,6 +26,7 @@ const (
 	TypeRouteChanged  EventType = "route.changed"
 	TypeIfaceChanged  EventType = "iface.changed"
 	TypeIPv6Changed   EventType = "ipv6.changed"
+	TypeDNSChanged    EventType = "dns.changed"
 )
 
 // NetChangeData is the payload for the network-config change events. Action is

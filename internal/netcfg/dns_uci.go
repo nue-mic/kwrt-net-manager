@@ -60,10 +60,10 @@ func (b *uciBackend) applyDNS() error {
 	b.applyMu.Lock()
 	defer b.applyMu.Unlock()
 
-	st, _ := b.storeBackend.DNSSettings()
-	doh, _ := b.storeBackend.DNSDoH()
-	records, _ := b.storeBackend.DNSRecords()
-	routes, _ := b.storeBackend.DNSDomainRoutes()
+	st, _ := b.storeBackend.DNSSettings() // 显式取旁车原值：DNSSettings 在 uci 后端被重写带 uci 反射，须绕过
+	doh, _ := b.DNSDoH()                  // 下三个 getter uci 后端未重写，直接走内嵌 store（避免 staticcheck QF1008）
+	records, _ := b.DNSRecords()
+	routes, _ := b.DNSDomainRoutes()
 
 	var db strings.Builder // dhcp(@dnsmasq[0] + hostrecord) batch
 

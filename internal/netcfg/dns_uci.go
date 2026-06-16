@@ -68,8 +68,11 @@ func (b *uciBackend) applyDNS() error {
 	var db strings.Builder // dhcp(@dnsmasq[0] + hostrecord) batch
 	bookChanged := false
 
+	// managed = 是否在接管 @dnsmasq[0]（DNS 设置开 或 DoH 开，二者任一都会改上游/noresolv）。
+	managed := st.Enabled || doh.Enabled
+
 	// 1. 首次接管时快照 stock 标量旧值（空串=原本无该 option）。
-	if st.Enabled && st.SavedStock == nil {
+	if managed && st.SavedStock == nil {
 		st.SavedStock = map[string]string{}
 		for _, k := range dnsManagedScalars {
 			v, _ := b.uciGet(dnsmasqSec + "." + k)
@@ -79,26 +82,29 @@ func (b *uciBackend) applyDNS() error {
 	}
 
 	// 2. stock 标量投射 / 回滚。
-	if st.Enabled {
-		if st.FilterAAAA && b.filterAAAASupported() {
-			setKV(&db, dnsmasqSec+".filter_aaaa", "1")
-		} else {
-			setKV(&db, dnsmasqSec+".filter_aaaa", "0")
+	if managed {
+		// 用户面板标量仅在「托管 DNS 设置」开启时投射；DoH-only 不动这些（保持 stock）。
+		if st.Enabled {
+			if st.FilterAAAA && b.filterAAAASupported() {
+				setKV(&db, dnsmasqSec+".filter_aaaa", "1")
+			} else {
+				setKV(&db, dnsmasqSec+".filter_aaaa", "0")
+			}
+			setIntOrDel(&db, dnsmasqSec+".cachesize", st.CacheSize)
+			setIntOrDel(&db, dnsmasqSec+".local_ttl", st.LocalTTL)
+			setIntOrDel(&db, dnsmasqSec+".min_cache_ttl", st.MinCacheTTL)
+			setIntOrDel(&db, dnsmasqSec+".max_cache_ttl", st.MaxCacheTTL)
 		}
-		setIntOrDel(&db, dnsmasqSec+".cachesize", st.CacheSize)
-		setIntOrDel(&db, dnsmasqSec+".local_ttl", st.LocalTTL)
-		setIntOrDel(&db, dnsmasqSec+".min_cache_ttl", st.MinCacheTTL)
-		setIntOrDel(&db, dnsmasqSec+".max_cache_ttl", st.MaxCacheTTL)
-		// noresolv：用户开「仅用指定上游」或启用 DoH 时；同时显式钉住 resolvfile 防止
-		// 路由器自身 resolv 失管（#6597/#5838）。
-		if (st.NoResolv && (st.DNSPrimary != "" || st.DNSSecondary != "")) || doh.Enabled {
+		// noresolv：开 DoH（必须只走本地代理）或「仅用指定上游」时置 1；同时显式钉住 resolvfile
+		// 防止路由器自身 resolv 失管（#6597/#5838）。
+		if doh.Enabled || (st.Enabled && st.NoResolv && (st.DNSPrimary != "" || st.DNSSecondary != "")) {
 			setKV(&db, dnsmasqSec+".noresolv", "1")
 			setKV(&db, dnsmasqSec+".resolvfile", dnsResolvAuto)
 		} else {
 			delK(&db, dnsmasqSec+".noresolv")
 		}
 	} else if st.SavedStock != nil {
-		// 关闭托管：逐项回写接管前的旧值（空串=删除该 option）。
+		// 完全关闭（DNS 与 DoH 都关）：逐项回写接管前的旧值（空串=删除该 option）。
 		for _, k := range dnsManagedScalars {
 			restoreStock(&db, dnsmasqSec+"."+k, st.SavedStock[k])
 		}

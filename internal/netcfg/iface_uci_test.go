@@ -455,6 +455,35 @@ func TestSaveNetIfaceMultiIPv6(t *testing.T) {
 	}
 }
 
+func TestNetIfacesReadsMultiIPv6(t *testing.T) {
+	show := "network.lan=interface\nnetwork.lan.proto='static'\nnetwork.lan.device='eth0'\n" +
+		"network.lan.ipaddr='192.168.1.1/24'\n" +
+		"network.lan.ip6addr='2001:db8::1/64' 'fd00::1/64'\n" +
+		"network.lan.ip6prefix='2001:db80:1::/48'\nnetwork.lan.ip6ifaceid='::1'\n"
+	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": show}}
+	be := newTestUCI(t, f)
+	ifaces, _ := be.NetIfaces()
+	lan := ifaces[0]
+	if lan.IP6Addr != "2001:db8::1/64" {
+		t.Errorf("primary v6 = %q", lan.IP6Addr)
+	}
+	v6 := 0
+	for _, a := range lan.ExtraAddrs {
+		if a.Family == FamilyIPv6 {
+			v6++
+			if a.Address != "fd00::1" || a.Prefix != 64 {
+				t.Errorf("v6 extra=%+v", a)
+			}
+		}
+	}
+	if v6 != 1 {
+		t.Errorf("want 1 ipv6 extra, got %d (%+v)", v6, lan.ExtraAddrs)
+	}
+	if lan.IP6Prefix != "2001:db80:1::/48" || lan.IP6IfaceID != "::1" {
+		t.Errorf("ip6prefix=%q ip6ifaceid=%q", lan.IP6Prefix, lan.IP6IfaceID)
+	}
+}
+
 func TestSaveNetIfacePPPoEv6Keepalive(t *testing.T) {
 	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": "", "firewall": ""}}
 	be := newTestUCI(t, f)

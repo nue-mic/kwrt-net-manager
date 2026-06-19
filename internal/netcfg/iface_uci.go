@@ -234,8 +234,11 @@ func (b *uciBackend) NetIfaces() ([]NetIface, error) {
 		ni.Auto = parseBoolOpt(s.opts["auto"])
 		ni.IP6Assign = atoiSafe(first(s.opts["ip6assign"]))
 		ni.IP6Hint = first(s.opts["ip6hint"])
-		ni.IP6Addr = first(s.opts["ip6addr"])
 		ni.IP6Gw = first(s.opts["ip6gw"])
+		ni.IP6Prefix = first(s.opts["ip6prefix"])
+		ni.IP6IfaceID = first(s.opts["ip6ifaceid"])
+		ni.Keepalive = first(s.opts["keepalive"])
+		ni.PPPoEv6 = parseBoolOpt(s.opts["ipv6"])
 		// addressing: 优先 list ipaddr（多条 CIDR），回退 option ipaddr+netmask。
 		// parseUci 对 option 与 list 同名都收进切片，第一条为主、其余进 ExtraAddrs。
 		addrs := s.opts["ipaddr"]
@@ -259,6 +262,20 @@ func (b *uciBackend) NetIfaces() ([]NetIface, error) {
 					ni.ExtraAddrs = append(ni.ExtraAddrs, IfaceAddr{Address: a, Prefix: prefix, Family: FamilyIPv4, Enabled: true})
 				}
 			}
+		}
+		// IPv6 addressing: list ip6addr（option+list 统一切片），第一条为主(保留 CIDR 原样)，
+		// 其余追加为 ipv6 附加地址（按 '/' 拆 Address/Prefix；无 '/' 时 Prefix=128）。
+		for idx, raw := range s.opts["ip6addr"] {
+			if idx == 0 {
+				ni.IP6Addr = raw
+				continue
+			}
+			a, prefix := raw, 128
+			if j := strings.IndexByte(raw, '/'); j >= 0 {
+				a = raw[:j]
+				prefix = atoiSafe(raw[j+1:])
+			}
+			ni.ExtraAddrs = append(ni.ExtraAddrs, IfaceAddr{Address: a, Prefix: prefix, Family: FamilyIPv6, Enabled: true})
 		}
 		dns := s.opts["dns"]
 		if len(dns) > 0 {

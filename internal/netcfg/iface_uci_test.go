@@ -218,7 +218,7 @@ func TestSaveNetIfaceFullFields(t *testing.T) {
 		"set network.wan.broadcast='1.1.1.255'",
 		"set network.wan.ip6assign='60'",
 		"set network.wan.ip6hint='10'",
-		"set network.wan.ip6addr='2001:db8::1/64'",
+		"add_list network.wan.ip6addr='2001:db8::1/64'", // 主 IPv6 现以 list 形式投射
 		"set network.wan.ip6gw='2001:db8::1'",
 	} {
 		if !strings.Contains(b, w) {
@@ -416,6 +416,57 @@ func TestSaveNetIfaceLANBridge(t *testing.T) {
 	} {
 		if !strings.Contains(b, w) {
 			t.Errorf("lan batch missing %q\n--- batch ---\n%s", w, b)
+		}
+	}
+}
+
+func TestSaveNetIfaceMultiIPv6(t *testing.T) {
+	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": "", "firewall": ""}}
+	be := newTestUCI(t, f)
+	err := be.SaveNetIface(NetIface{
+		ID: "lan", Role: RoleLAN, Device: "eth0", Ports: []string{"eth0"},
+		IPAddr: "192.168.1.1", Netmask: "255.255.255.0",
+		IP6Addr: "2001:db8::1/64",
+		ExtraAddrs: []IfaceAddr{
+			{Address: "10.0.0.1", Prefix: 24, Family: "ipv4", Enabled: true},
+			{Address: "fd00::1", Prefix: 64, Family: "ipv6", Enabled: true},
+			{Address: "fd11::1", Prefix: 64, Family: "ipv6", Enabled: true},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := f.batchContaining("commit network")
+	for _, w := range []string{
+		"delete network.lan.ip6addr",
+		"add_list network.lan.ip6addr='2001:db8::1/64'",
+		"add_list network.lan.ip6addr='fd00::1/64'",
+		"add_list network.lan.ip6addr='fd11::1/64'",
+		"add_list network.lan.ipaddr='192.168.1.1/24'",
+		"add_list network.lan.ipaddr='10.0.0.1/24'",
+	} {
+		if !strings.Contains(b, w) {
+			t.Errorf("ipv6 batch missing %q\n%s", w, b)
+		}
+	}
+	// 不得再写 option ip6addr
+	if strings.Contains(b, "set network.lan.ip6addr=") {
+		t.Errorf("must not write option ip6addr with list\n%s", b)
+	}
+}
+
+func TestSaveNetIfacePPPoEv6Keepalive(t *testing.T) {
+	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": "", "firewall": ""}}
+	be := newTestUCI(t, f)
+	v6 := true
+	if err := be.SaveNetIface(NetIface{ID: "wan", Role: RoleWAN, Proto: ProtoPPPoE, Device: "eth1",
+		Username: "u", Password: "p", Keepalive: "5 25", PPPoEv6: &v6}); err != nil {
+		t.Fatal(err)
+	}
+	b := f.batchContaining("commit network")
+	for _, w := range []string{"set network.wan.keepalive='5 25'", "set network.wan.ipv6='1'"} {
+		if !strings.Contains(b, w) {
+			t.Errorf("pppoe batch missing %q\n%s", w, b)
 		}
 	}
 }

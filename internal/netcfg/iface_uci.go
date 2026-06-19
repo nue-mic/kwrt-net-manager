@@ -369,6 +369,7 @@ func (b *uciBackend) SaveNetIface(in NetIface) error {
 			chosenDev = dev
 		}
 		writeAddrList(&sb, id, in)
+		writeAddr6List(&sb, id, in)
 	} else {
 		// WAN
 		switch in.Proto {
@@ -378,10 +379,13 @@ func (b *uciBackend) SaveNetIface(in NetIface) error {
 			setOpt(&sb, id, "password", in.Password)
 			setOptOrDel(&sb, id, "service", in.Service)
 			setOptOrDel(&sb, id, "ac", in.AC)
+			setOptOrDel(&sb, id, "keepalive", in.Keepalive)
+			setBoolOptOrDel(&sb, id, "ipv6", in.PPPoEv6)
 			delOpt(&sb, id, "ipaddr", "netmask", "gateway")
 		case ProtoStatic:
 			fmt.Fprintf(&sb, "set network.%s.proto='static'\n", id)
 			writeAddrList(&sb, id, in)
+			writeAddr6List(&sb, id, in)
 			setOptOrDel(&sb, id, "gateway", in.Gateway)
 			delOpt(&sb, id, "username", "password")
 			fmt.Fprintf(&sb, "delete network.%s.dns\n", id)
@@ -801,7 +805,29 @@ func writeAddrList(sb *strings.Builder, id string, in NetIface) {
 		if !a.Enabled || a.Address == "" {
 			continue
 		}
+		if a.Family == FamilyIPv6 {
+			continue // ipv6 附加地址走 writeAddr6List → list ip6addr，绝不混入 list ipaddr
+		}
 		fmt.Fprintf(sb, "add_list network.%s.ipaddr='%s/%d'\n", id, a.Address, a.Prefix)
+	}
+}
+
+// writeAddr6List 把主 IPv6(IP6Addr) + 启用的 ipv6 附加地址统一投射为 list ip6addr。
+// 有任何 ipv6 地址时先 delete 清掉 option/list 旧形式，再逐条 add_list（主 IPv6 第一条）。
+// 没有任何 ipv6 地址时只发 delete（清理，幂等）。
+func writeAddr6List(sb *strings.Builder, id string, in NetIface) {
+	var v6 []string
+	if strings.TrimSpace(in.IP6Addr) != "" {
+		v6 = append(v6, in.IP6Addr) // 已是 CIDR
+	}
+	for _, a := range in.ExtraAddrs {
+		if a.Family == FamilyIPv6 && a.Enabled && a.Address != "" {
+			v6 = append(v6, fmt.Sprintf("%s/%d", a.Address, a.Prefix))
+		}
+	}
+	fmt.Fprintf(sb, "delete network.%s.ip6addr\n", id)
+	for _, a := range v6 {
+		fmt.Fprintf(sb, "add_list network.%s.ip6addr='%s'\n", id, a)
 	}
 }
 
@@ -849,7 +875,9 @@ func writeIfaceExtraOpts(sb *strings.Builder, id string, in NetIface) {
 		fmt.Fprintf(sb, "delete network.%s.ip6assign\n", id)
 	}
 	setOptOrDel(sb, id, "ip6hint", in.IP6Hint)
-	setOptOrDel(sb, id, "ip6addr", in.IP6Addr)
+	// ip6addr 由 writeAddr6List 以 list 形式处理（多 IPv6），此处不再写 option。
+	setOptOrDel(sb, id, "ip6prefix", in.IP6Prefix)
+	setOptOrDel(sb, id, "ip6ifaceid", in.IP6IfaceID)
 	setOptOrDel(sb, id, "ip6gw", in.IP6Gw)
 }
 

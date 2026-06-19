@@ -300,6 +300,8 @@ func (b *uciBackend) SaveNetIface(in NetIface) error {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "set network.%s=interface\n", id)
 
+	var chosenDev string // 最终落到 interface.device 的设备名（供 clone_mac 定位）
+
 	if in.Role == RoleLAN {
 		in.Proto = ProtoStatic
 		fmt.Fprintf(&sb, "set network.%s.proto='static'\n", id)
@@ -318,15 +320,18 @@ func (b *uciBackend) SaveNetIface(in NetIface) error {
 			}
 			fmt.Fprintf(&sb, "set network.%s.device='%s'\n", id, dev)
 			b.writeBridge(&sb, dev, ports)
+			chosenDev = dev
 		case len(ports) == 1:
 			fmt.Fprintf(&sb, "set network.%s.device='%s'\n", id, ports[0])
 			b.detachPorts(&sb, "", ports) // 独占该物理口：从其它网桥摘除
+			chosenDev = ports[0]
 		default:
 			dev := in.Device
 			if dev == "" {
 				dev = "br-" + id
 			}
 			fmt.Fprintf(&sb, "set network.%s.device='%s'\n", id, dev)
+			chosenDev = dev
 		}
 		writeAddrList(&sb, id, in)
 	} else {
@@ -362,6 +367,7 @@ func (b *uciBackend) SaveNetIface(in NetIface) error {
 		if dev != "" {
 			fmt.Fprintf(&sb, "set network.%s.device='%s'\n", id, dev)
 			b.detachPorts(&sb, "", []string{dev}) // WAN takes the NIC exclusively
+			chosenDev = dev
 		}
 		if in.DefaultGW {
 			fmt.Fprintf(&sb, "delete network.%s.defaultroute\n", id) // default is on
@@ -374,6 +380,7 @@ func (b *uciBackend) SaveNetIface(in NetIface) error {
 	}
 	setOptOrDel(&sb, id, "remark", in.Remark)
 	writeIfaceExtraOpts(&sb, id, in)
+	b.ensureDeviceMAC(&sb, id, chosenDev, in.CloneMAC)
 	sb.WriteString("commit network\n")
 
 	if out, err := b.run.Run(sb.String(), "uci", "batch"); err != nil {
@@ -396,6 +403,7 @@ func (b *uciBackend) writeBridge(sb *strings.Builder, dev string, ports []string
 	}
 	fmt.Fprintf(sb, "set network.%s.type='bridge'\n", sec)
 	fmt.Fprintf(sb, "set network.%s.name='%s'\n", sec, dev)
+	fmt.Fprintf(sb, "set network.%s.%s='%s'\n", sec, managedOpt, managedMarker)
 	fmt.Fprintf(sb, "delete network.%s.ports\n", sec)
 	for _, p := range ports {
 		if p != "" && p != dev {
@@ -483,6 +491,29 @@ func (b *uciBackend) deviceSectionByName(dev string) string {
 		}
 	}
 	return ""
+}
+
+// ensureDeviceMAC 把克隆 MAC 写到接口对应的 `config device` 段（DSA 正确位置）。
+// dev 已有 device 段→直接写；单网卡直连无 device 段→新建 dev_<id>（name=物理口，
+// 打 managed_by）承载，interface.device 仍按名字引用该 device。mac 为空则清除。
+func (b *uciBackend) ensureDeviceMAC(sb *strings.Builder, id, dev, mac string) {
+	if dev == "" {
+		return
+	}
+	devSec := b.deviceSectionByName(dev)
+	if strings.TrimSpace(mac) == "" {
+		if devSec != "" {
+			fmt.Fprintf(sb, "delete network.%s.macaddr\n", devSec)
+		}
+		return
+	}
+	if devSec == "" {
+		devSec = uciName("dev_" + id)
+		fmt.Fprintf(sb, "set network.%s=device\n", devSec)
+		fmt.Fprintf(sb, "set network.%s.name='%s'\n", devSec, dev)
+		fmt.Fprintf(sb, "set network.%s.%s='%s'\n", devSec, managedOpt, managedMarker)
+	}
+	fmt.Fprintf(sb, "set network.%s.macaddr='%s'\n", devSec, mac)
 }
 
 func (b *uciBackend) DeleteNetIface(id string) error {

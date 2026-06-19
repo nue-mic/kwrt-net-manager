@@ -227,6 +227,47 @@ func TestSaveNetIfaceFullFields(t *testing.T) {
 	}
 }
 
+func TestSaveNetIfaceCloneMAC(t *testing.T) {
+	// 单网卡直连（无 device 段）：建 dev_lan 承载 macaddr。
+	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": "", "firewall": ""}}
+	be := newTestUCI(t, f)
+	err := be.SaveNetIface(NetIface{
+		ID: "lan", Role: RoleLAN, Device: "eth0", Ports: []string{"eth0"},
+		IPAddr: "192.168.1.1", Netmask: "255.255.255.0", CloneMAC: "AA:BB:CC:DD:EE:FF",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := f.batchContaining("commit network")
+	for _, w := range []string{
+		"set network.dev_lan=device",
+		"set network.dev_lan.name='eth0'",
+		"set network.dev_lan.macaddr='AA:BB:CC:DD:EE:FF'",
+		"set network.dev_lan.managed_by='kwrt-net-manager'",
+	} {
+		if !strings.Contains(b, w) {
+			t.Errorf("clone-mac batch missing %q\n--- batch ---\n%s", w, b)
+		}
+	}
+}
+
+func TestSaveNetIfaceCloneMACOnBridge(t *testing.T) {
+	// 已是网桥（dev_lan 存在）：macaddr 写到现有 device 段，不新建。
+	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": sampleNetIfaceShow, "firewall": ""}}
+	be := newTestUCI(t, f)
+	err := be.SaveNetIface(NetIface{
+		ID: "lan", Role: RoleLAN, Device: "br-lan", Ports: []string{"eth1", "eth2"},
+		IPAddr: "192.168.1.1", Netmask: "255.255.255.0", CloneMAC: "AA:BB:CC:DD:EE:01",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := f.batchContaining("commit network")
+	if !strings.Contains(b, "set network.dev_lan.macaddr='AA:BB:CC:DD:EE:01'") {
+		t.Errorf("bridge clone-mac should write to dev_lan\n%s", b)
+	}
+}
+
 func TestSaveNetIfaceLANBridge(t *testing.T) {
 	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": sampleNetIfaceShow}}
 	be := newTestUCI(t, f)

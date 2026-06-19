@@ -468,6 +468,14 @@ function IfaceDrawer({ open, role, editing, nics, onClose, onSaved, onAction, on
                 <Input placeholder="119.x.x.1" />
               </Form.Item>
             )}
+            {editing && role === 'lan' && (
+              <Form.Item>
+                <Button type="link" style={{ paddingLeft: 0 }} icon={<ThunderboltOutlined />}
+                  onClick={() => { window.location.hash = `#/dhcp?iface=${editing.id}`; }}>
+                  为该内网启用 DHCP（去 DHCP 服务端配置）
+                </Button>
+              </Form.Item>
+            )}
           </>
         )}
 

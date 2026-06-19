@@ -165,6 +165,9 @@ function roleTag(n: net.NIC) {
   return <Tag>{m[n.kind] ?? n.kind}</Tag>;
 }
 
+// 联网方式（proto）中文标签，用于网卡卡片显示其绑定接口的接入方式。
+const PROTO_LABEL: Record<string, string> = { dhcp: 'DHCP', pppoe: 'PPPoE', static: '静态' };
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<net.NetStatus | null>(null);
@@ -230,6 +233,12 @@ export default function Dashboard() {
     () => nics.filter((n) => n.role || (n.ip_addrs && n.ip_addrs.length) || ['physical', 'bridge', 'wifi'].includes(n.kind)),
     [nics],
   );
+  // 网卡绑定接口 → 联网方式(proto)，用于卡片显示 DHCP/PPPoE/静态。
+  const ifaceProto = useMemo(() => {
+    const m: Record<string, string> = {};
+    [...(ov.wans ?? []), ...(ov.lans ?? [])].forEach((i) => { m[i.id] = i.proto; });
+    return m;
+  }, [ov]);
 
   const quick = [
     { title: 'DHCP 服务端', value: counts.servers, sub: `${counts.serversOn} 个已启用`, icon: <ApartmentOutlined />, color: '#1f6fb2', to: '/dhcp/servers' },
@@ -325,13 +334,14 @@ export default function Dashboard() {
               const ips = n.ip_addrs ?? [];
               return (
                 <Col xs={24} sm={12} xl={8} key={n.name}>
-                  <Card size="small" hoverable onClick={() => navigate('/nics')} styles={{ body: { padding: 12 } }}
+                  <Card size="small" hoverable onClick={() => navigate(n.bound ? `/net?iface=${encodeURIComponent(n.bound)}` : '/nics')} styles={{ body: { padding: 12 } }}
                     style={{ borderLeft: `3px solid ${n.up ? (n.role === 'wan' ? '#1f6fb2' : '#52c41a') : '#d9d9d9'}` }}>
                     <Space style={{ justifyContent: 'space-between', width: '100%' }} align="start">
                       <Space size={6}>
                         <span style={{ fontSize: 16, color: n.up ? '#1f6fb2' : '#bfbfbf' }}>{nicIcon(n.kind)}</span>
                         <Text strong>{n.name}</Text>
                         {roleTag(n)}
+                        {n.bound && ifaceProto[n.bound] && <Tag color="default">{PROTO_LABEL[ifaceProto[n.bound]] ?? ifaceProto[n.bound]}</Tag>}
                       </Space>
                       <Tag color={n.up ? 'success' : 'default'} style={{ marginInlineEnd: 0 }}>{n.up ? '已连接' : '未连接'}</Tag>
                     </Space>

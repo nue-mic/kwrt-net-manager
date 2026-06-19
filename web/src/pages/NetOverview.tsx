@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Alert, App, Button, Card, Checkbox, Col, Collapse, Drawer, Form, Input, InputNumber,
   Modal, Popconfirm, Radio, Row, Select, Space, Statistic, Switch, Tag, Tooltip, Typography,
@@ -66,6 +66,19 @@ export default function NetOverview() {
   };
 
   const openEdit = (role: 'lan' | 'wan', editing: net.NetIface | null) => setDrawer({ open: true, role, editing });
+
+  // 从 ?iface=<id> 自动打开对应接口详情（如首页「物理连接/网卡」卡片点击跳转过来）。
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const id = searchParams.get('iface');
+    if (!id) return;
+    const found = [...(data.wans || []), ...(data.lans || [])].find((x) => x.id === id);
+    if (found) {
+      openEdit(found.role as 'lan' | 'wan', found);
+      setSearchParams({}, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, data]);
 
   const onAction = async (id: string, action: 'connect' | 'disconnect' | 'restart') => {
     try {
@@ -166,7 +179,7 @@ export default function NetOverview() {
           <PortCard
             key={l.id}
             title={l.name}
-            sub={l.up ? '已连接' : '未连接'}
+            sub={`${protoLabel(l.proto)}${l.up ? ' · 已连接' : ' · 未连接'}`}
             ips={ifaceIps(l, nics)}
             color={l.up ? '#52c41a' : '#9ca3af'}
             icon={<ApartmentOutlined />}

@@ -911,3 +911,49 @@ components:
             ping_ms: { type: number }
             server: { type: string }
             isp: { type: string }
+    NetIface:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        role: { type: string, enum: [lan, wan] }
+        proto: { type: string, enum: [static, dhcp, pppoe] }
+        device: { type: string }
+        ports:
+          type: array
+          items: { type: string }
+        ipaddr: { type: string }
+        netmask: { type: string }
+        gateway: { type: string }
+        dns_primary: { type: string }
+        dns_secondary: { type: string }
+        username: { type: string }
+        password: { type: string }
+        service: { type: string }
+        ac: { type: string }
+        mtu: { type: integer }
+        default_gw: { type: boolean }
+        clone_mac: { type: string }
+        remark: { type: string }
+        extra_addrs:
+          type: array
+          items: { $ref: "#/components/schemas/IfaceAddr" }
+        metric: { type: integer }
+        peerdns: { type: boolean, nullable: true }
+        broadcast: { type: string }
+        force_link: { type: boolean, nullable: true }
+        auto: { type: boolean, nullable: true }
+        ip6assign: { type: integer }
+        ip6hint: { type: string }
+        ip6addr: { type: string }
+        ip6gw: { type: string }
+        up: { type: boolean, readOnly: true }
+        runtime_ip: { type: string, readOnly: true }
+    IfaceAddr:
+      type: object
+      properties:
+        address: { type: string }
+        prefix: { type: integer }
+        family: { type: string, enum: [ipv4, ipv6] }
+        remark: { type: string }
+        enabled: { type: boolean }

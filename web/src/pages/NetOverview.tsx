@@ -153,6 +153,7 @@ export default function NetOverview() {
             key={w.id}
             title={w.name}
             sub={`${protoLabel(w.proto)}${w.up ? ' · 已连接' : ' · 未连接'}`}
+            ips={ifaceIps(w, nics)}
             color={w.up ? '#1f6fb2' : '#9ca3af'}
             icon={<GlobalOutlined />}
             onClick={() => openEdit('wan', w)}
@@ -165,7 +166,8 @@ export default function NetOverview() {
           <PortCard
             key={l.id}
             title={l.name}
-            sub={`${l.ipaddr || '—'}${l.up ? ' · 已连接' : ''}`}
+            sub={l.up ? '已连接' : '未连接'}
+            ips={ifaceIps(l, nics)}
             color={l.up ? '#52c41a' : '#9ca3af'}
             icon={<ApartmentOutlined />}
             onClick={() => openEdit('lan', l)}
@@ -191,6 +193,26 @@ function protoLabel(p: string) {
   return p === 'pppoe' ? 'PPPoE 拨号' : p === 'static' ? '静态 IP' : 'DHCP 动态';
 }
 
+// ifaceIps 汇总一个接口要显示的全部 IP：优先取该 device 网卡的真实内核地址（ip addr，
+// 含静态/DHCP/PD/SLAAC 等全部），过滤链路本地(fe80)/回环；运行态拿不到时（dev/store）
+// 回退到配置态（主 IP + 附加 IP）。IPv4 在前、IPv6 在后，便于阅读。
+function ifaceIps(iface: net.NetIface, nics: net.NIC[]): string[] {
+  const skip = (cidr: string) => {
+    const ip = cidr.split('/')[0].toLowerCase();
+    return ip.startsWith('fe80') || ip === '::1' || ip.startsWith('127.');
+  };
+  const nic = nics.find((n) => n.name === iface.device);
+  let ips = (nic?.ip_addrs || []).filter((a) => !skip(a));
+  if (ips.length === 0) {
+    const cfg: string[] = [];
+    if (iface.ipaddr) cfg.push(iface.netmask ? `${iface.ipaddr}/${maskToPrefix(iface.netmask)}` : iface.ipaddr);
+    (iface.extra_addrs || []).forEach((a) => { if (a.address) cfg.push(`${a.address}/${a.prefix}`); });
+    if (cfg.length === 0 && iface.runtime_ip) cfg.push(iface.runtime_ip);
+    ips = cfg;
+  }
+  return [...ips].sort((a, b) => Number(a.includes(':')) - Number(b.includes(':')));
+}
+
 function PortGroup({ title, count, extra, children }: { title: string; count: number; extra?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 18 }}>
@@ -207,17 +229,24 @@ function PortGroup({ title, count, extra, children }: { title: string; count: nu
   );
 }
 
-function PortCard({ title, sub, color, icon, onClick }: { title: string; sub: string; color: string; icon: React.ReactNode; onClick?: () => void }) {
+function PortCard({ title, sub, color, icon, onClick, ips }: { title: string; sub: string; color: string; icon: React.ReactNode; onClick?: () => void; ips?: string[] }) {
   return (
     <Card
       size="small"
       hoverable={!!onClick}
       onClick={onClick}
-      style={{ width: 140, textAlign: 'center', cursor: onClick ? 'pointer' : 'default', borderColor: color }}
-      styles={{ body: { padding: '12px 8px' } }}
+      style={{ width: 200, textAlign: 'center', cursor: onClick ? 'pointer' : 'default', borderColor: color }}
+      styles={{ body: { padding: '12px 10px' } }}
     >
       <div style={{ fontSize: 26, color }}>{icon}</div>
       <div style={{ fontWeight: 600, marginTop: 4 }}>{title}</div>
+      {ips && ips.length > 0 && (
+        <div style={{ margin: '4px 0' }}>
+          {ips.map((ip) => (
+            <Text key={ip} style={{ display: 'block', fontSize: 11, lineHeight: 1.5, wordBreak: 'break-all' }}>{ip}</Text>
+          ))}
+        </div>
+      )}
       <Text type="secondary" style={{ fontSize: 11 }}>{sub}</Text>
     </Card>
   );

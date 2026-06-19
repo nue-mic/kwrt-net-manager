@@ -9,6 +9,7 @@ func cloneIface(x NetIface) NetIface {
 	x.PeerDNS = cloneBoolPtr(x.PeerDNS)
 	x.ForceLink = cloneBoolPtr(x.ForceLink)
 	x.Auto = cloneBoolPtr(x.Auto)
+	x.PPPoEv6 = cloneBoolPtr(x.PPPoEv6)
 	return x
 }
 

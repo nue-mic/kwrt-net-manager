@@ -240,17 +240,24 @@ func validateNetIface(in *NetIface) error {
 	}
 	for i := range in.ExtraAddrs {
 		a := &in.ExtraAddrs[i]
-		if a.Family == "" {
+		switch a.Family {
+		case "", FamilyIPv4:
 			a.Family = FamilyIPv4
-		}
-		if a.Family != FamilyIPv4 {
-			return errors.New("附加 IP 本期仅支持 IPv4")
-		}
-		if !netutil.IsIPv4(a.Address) {
-			return errors.New("附加 IP 地址不合法：" + a.Address)
-		}
-		if a.Prefix < 1 || a.Prefix > 32 {
-			return errors.New("附加 IP 掩码位必须在 1-32：" + a.Address)
+			if !netutil.IsIPv4(a.Address) {
+				return errors.New("附加 IPv4 地址不合法：" + a.Address)
+			}
+			if a.Prefix < 1 || a.Prefix > 32 {
+				return errors.New("附加 IPv4 掩码位需在 1-32：" + a.Address)
+			}
+		case FamilyIPv6:
+			if !netutil.IsIPv6(a.Address) {
+				return errors.New("附加 IPv6 地址不合法：" + a.Address)
+			}
+			if a.Prefix < 1 || a.Prefix > 128 {
+				return errors.New("附加 IPv6 前缀需在 1-128：" + a.Address)
+			}
+		default:
+			return errors.New("附加 IP family 必须是 ipv4 或 ipv6")
 		}
 		if seen[a.Address] {
 			return errors.New("附加 IP 与已有地址重复：" + a.Address)
@@ -273,6 +280,9 @@ func validateNetIface(in *NetIface) error {
 	}
 	if in.IP6Gw != "" && !netutil.IsIPv6(in.IP6Gw) {
 		return errors.New("IPv6 网关（ip6gw）不合法")
+	}
+	if in.IP6Prefix != "" && !netutil.IsIPv6(strings.SplitN(in.IP6Prefix, "/", 2)[0]) {
+		return errors.New("IPv6 分发前缀（ip6prefix）不合法")
 	}
 	if in.Broadcast != "" && !netutil.IsIPv4(in.Broadcast) {
 		return errors.New("广播地址不合法")

@@ -74,6 +74,11 @@ type NetIface struct {
 	IP6Addr   string `json:"ip6addr,omitempty"`    // option ip6addr（单条静态 IPv6/CIDR）
 	IP6Gw     string `json:"ip6gw,omitempty"`      // option ip6gw（IPv6 默认网关）
 
+	IP6Prefix  string `json:"ip6prefix,omitempty"`  // option ip6prefix（向下游分发的前缀 CIDR）
+	IP6IfaceID string `json:"ip6ifaceid,omitempty"` // option ip6ifaceid（接口 ID 后缀）
+	Keepalive  string `json:"keepalive,omitempty"`  // PPPoE option keepalive（如 "5 25"）
+	PPPoEv6    *bool  `json:"pppoe_ipv6,omitempty"` // PPPoE 上启用 IPv6（option ipv6 '1'）
+
 	// Runtime (read-only): is the interface up and what address it actually got.
 	Up        bool   `json:"up"`
 	RuntimeIP string `json:"runtime_ip"`
@@ -83,7 +88,7 @@ type NetIface struct {
 type IfaceAddr struct {
 	Address string `json:"address"` // 点分 IPv4，如 10.0.0.1
 	Prefix  int    `json:"prefix"`  // CIDR 位数，如 24
-	Family  string `json:"family"`  // 本期固定 "ipv4"；预留 "ipv6"
+	Family  string `json:"family"`  // "ipv4" | "ipv6"
 	Remark  string `json:"remark"`  // 备注（仅旁车）
 	Enabled bool   `json:"enabled"` // 关闭=不投射（本期 UI 不暴露禁用，默认 true）
 }

@@ -56,6 +56,25 @@ func TestValidateNetIfaceExtraAddrs(t *testing.T) {
 	}
 }
 
+func TestValidateNetIfaceIPv6Extra(t *testing.T) {
+	base := NetIface{Role: RoleLAN, IPAddr: "192.168.1.1", Netmask: "255.255.255.0"}
+	ok := base
+	ok.ExtraAddrs = []IfaceAddr{{Address: "2001:db8::1", Prefix: 64, Family: "ipv6", Enabled: true}}
+	if err := validateNetIface(&ok); err != nil {
+		t.Errorf("valid ipv6 extra rejected: %v", err)
+	}
+	bad := base
+	bad.ExtraAddrs = []IfaceAddr{{Address: "2001:db8::1", Prefix: 129, Family: "ipv6", Enabled: true}}
+	if err := validateNetIface(&bad); err == nil {
+		t.Error("ipv6 prefix 129 accepted")
+	}
+	badip := base
+	badip.ExtraAddrs = []IfaceAddr{{Address: "192.168.1.5", Prefix: 64, Family: "ipv6", Enabled: true}}
+	if err := validateNetIface(&badip); err == nil {
+		t.Error("ipv4 address with family ipv6 accepted")
+	}
+}
+
 func TestCheckIfaceRelations(t *testing.T) {
 	existing := []NetIface{
 		{ID: "lan", Role: RoleLAN, IPAddr: "192.168.1.1", Netmask: "255.255.255.0"},

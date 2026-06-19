@@ -202,6 +202,7 @@ func CloneState(s State) State {
 		out.NetIfaces[i].PeerDNS = cloneBoolPtr(src.PeerDNS)
 		out.NetIfaces[i].ForceLink = cloneBoolPtr(src.ForceLink)
 		out.NetIfaces[i].Auto = cloneBoolPtr(src.Auto)
+		out.NetIfaces[i].PPPoEv6 = cloneBoolPtr(src.PPPoEv6)
 	}
 	out.WANv6s = append([]WANv6(nil), s.WANv6s...)
 	out.LANv6s = append([]LANv6(nil), s.LANv6s...)

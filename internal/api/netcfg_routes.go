@@ -108,6 +108,7 @@ func registerNetcfgRoutes(r chi.Router, d Deps) {
 
 	// 网卡列表 + 内外网设置（LAN/WAN 接口 + 物理网卡）。
 	r.Get("/api/v1/nics", h.ListNICs)
+	r.Get("/api/v1/nics/{name}", h.GetNICDetail)
 	r.Get("/api/v1/netcfg/overview", h.NetOverview)
 	r.Get("/api/v1/ifaces", h.ListNetIfaces)
 	r.Post("/api/v1/ifaces", h.CreateNetIface)

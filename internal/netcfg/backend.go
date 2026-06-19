@@ -51,6 +51,8 @@ type Backend interface {
 
 	// Physical NIC inventory (网卡列表, read-only).
 	NICs() ([]NIC, error)
+	// NICDetail 返回单块网卡的综合详情（sysfs + ip + 尽力而为的 ethtool）。
+	NICDetail(name string) (NICDetail, error)
 	// Configured LAN/WAN interfaces (内外网设置).
 	NetIfaces() ([]NetIface, error)
 	SaveNetIface(NetIface) error

@@ -114,6 +114,28 @@ func TestCheckIfaceRelationsSelfAndExtra(t *testing.T) {
 	}
 }
 
+func TestValidNICName(t *testing.T) {
+	cases := []struct {
+		name string
+		want bool
+	}{
+		{"eth0", true},
+		{"br-lan", true},
+		{"eth0.10", true},
+		{"..", false},
+		{"../etc", false},
+		{"-d", false},
+		{"a;b", false},
+		{"", false},
+		{"0123456789abcdef", false}, // 16 chars > IFNAMSIZ(15)
+	}
+	for _, c := range cases {
+		if got := validNICName(c.name); got != c.want {
+			t.Errorf("validNICName(%q) = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
 func TestCanDeleteLastLAN(t *testing.T) {
 	one := []NetIface{{ID: "lan", Role: RoleLAN}}
 	if err := canDeleteNetIface("lan", one); err == nil {

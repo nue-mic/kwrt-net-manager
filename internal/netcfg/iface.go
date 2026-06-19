@@ -24,6 +24,28 @@ func (s *Service) ListNICs() ([]NIC, error) {
 	return nics, nil
 }
 
+// NICDetail returns the 综合详情 for one NIC by name (404 via ErrNotFound).
+func (s *Service) NICDetail(name string) (NICDetail, error) {
+	if !validNICName(name) {
+		return NICDetail{}, ErrNotFound
+	}
+	return s.be.NICDetail(name)
+}
+
+// validNICName 限制网卡名为合法 Linux 接口名：非空、≤15(IFNAMSIZ)、仅 [A-Za-z0-9._-]，
+// 且不含 ".."（防 /sys 路径穿越）与前导 '-'（防当成 ip/ethtool 参数）。
+func validNICName(s string) bool {
+	if s == "" || len(s) > 15 || s[0] == '-' || strings.Contains(s, "..") {
+		return false
+	}
+	for _, c := range s {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '.' || c == '_' || c == '-') {
+			return false
+		}
+	}
+	return true
+}
+
 // ================= LAN/WAN interfaces (内外网设置) =================
 
 // ListNetIfaces returns the configured LAN/WAN interfaces.

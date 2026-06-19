@@ -3,6 +3,8 @@ package api
 import (
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/mia-clark/kwrt-net-manager/internal/netcfg"
 )
 
@@ -14,6 +16,16 @@ func (h *NetcfgHandler) ListNICs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	WriteJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+// GetNICDetail GET /api/v1/nics/{name} — 单块网卡综合详情（网卡详情页）。
+func (h *NetcfgHandler) GetNICDetail(w http.ResponseWriter, r *http.Request) {
+	d, err := h.svc.NICDetail(chi.URLParam(r, "name"))
+	if err != nil {
+		h.writeNetErr(w, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, d)
 }
 
 // NetOverview GET /api/v1/netcfg/overview — 内外网设置 dashboard summary.

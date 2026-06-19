@@ -80,6 +80,20 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/NIC" }
 
+  /api/v1/nics/{name}:
+    get:
+      tags: [netcfg]
+      summary: 单块网卡综合详情（sysfs + ip + 尽力而为 ethtool）
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NICDetail" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /api/v1/netcfg/overview:
     get:
       tags: [netcfg]
@@ -1090,6 +1104,77 @@ components:
         ip_addrs:
           type: array
           items: { type: string }
+    NICAddr:
+      type: object
+      properties:
+        family: { type: string, enum: [ipv4, ipv6] }
+        address: { type: string }
+        prefix: { type: integer }
+        scope: { type: string }
+    NICStats:
+      type: object
+      properties:
+        rx_bytes: { type: integer }
+        tx_bytes: { type: integer }
+        rx_packets: { type: integer }
+        tx_packets: { type: integer }
+        rx_errors: { type: integer }
+        tx_errors: { type: integer }
+        rx_dropped: { type: integer }
+        tx_dropped: { type: integer }
+        multicast: { type: integer }
+        collisions: { type: integer }
+    NICDetail:
+      type: object
+      description: 单块网卡的综合详情。包含 NIC 的全部字段（内嵌提升），再叠加 sysfs/ip/ethtool 信息。
+      properties:
+        # 内嵌 NIC（提升字段）
+        name: { type: string }
+        mac: { type: string }
+        up: { type: boolean }
+        running: { type: boolean }
+        speed_mb: { type: integer }
+        duplex: { type: string }
+        mtu: { type: integer }
+        kind: { type: string, enum: [physical, bridge, vlan, wifi, virtual] }
+        bound: { type: string }
+        role: { type: string, enum: [lan, wan, ""] }
+        rx_bytes: { type: integer }
+        tx_bytes: { type: integer }
+        ip_addrs:
+          type: array
+          items: { type: string }
+        # 链路/拓扑（sysfs）
+        ifindex: { type: integer }
+        operstate: { type: string }
+        carrier: { type: boolean }
+        carrier_changes: { type: integer }
+        tx_queue_len: { type: integer }
+        ifalias: { type: string }
+        master: { type: string }
+        bridge_ports:
+          type: array
+          items: { type: string }
+        vlan_id: { type: integer }
+        vlan_proto: { type: string }
+        # 驱动/链路能力（ethtool，尽力而为，可能为空）
+        driver: { type: string }
+        driver_version: { type: string }
+        firmware: { type: string }
+        bus_info: { type: string }
+        perm_mac: { type: string }
+        autoneg: { type: string, enum: [on, off, ""] }
+        port: { type: string }
+        supported_modes:
+          type: array
+          items: { type: string }
+        advertised_modes:
+          type: array
+          items: { type: string }
+        stats: { $ref: "#/components/schemas/NICStats" }
+        addrs:
+          type: array
+          items: { $ref: "#/components/schemas/NICAddr" }
     NetOverview:
       type: object
       properties:

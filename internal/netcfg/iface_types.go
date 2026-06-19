@@ -28,6 +28,59 @@ const (
 	NICVirtual  = "virtual"
 )
 
+// NICAddr 是网卡上的一个地址（比 NIC.IPAddrs 的纯 CIDR 字符串更结构化），
+// 来自 `ip -o addr show dev <name>`，供详情页逐条展示。
+type NICAddr struct {
+	Family  string `json:"family"`  // ipv4 | ipv6
+	Address string `json:"address"` // 不含前缀，如 192.168.1.1
+	Prefix  int    `json:"prefix"`  // CIDR 位数
+	Scope   string `json:"scope"`   // global | link | host
+}
+
+// NICStats 是 /sys/class/net/<name>/statistics 的收发计数明细。
+type NICStats struct {
+	RxBytes    uint64 `json:"rx_bytes"`
+	TxBytes    uint64 `json:"tx_bytes"`
+	RxPackets  uint64 `json:"rx_packets"`
+	TxPackets  uint64 `json:"tx_packets"`
+	RxErrors   uint64 `json:"rx_errors"`
+	TxErrors   uint64 `json:"tx_errors"`
+	RxDropped  uint64 `json:"rx_dropped"`
+	TxDropped  uint64 `json:"tx_dropped"`
+	Multicast  uint64 `json:"multicast"`
+	Collisions uint64 `json:"collisions"`
+}
+
+// NICDetail 是单块网卡的综合详情（网卡详情页）。内嵌 NIC（提升 name/mac/up/…/ip_addrs），
+// 再叠加 sysfs 链路/统计、网桥从属关系、VLAN、以及尽力而为的 ethtool 驱动/链路能力信息。
+type NICDetail struct {
+	NIC                     // 内嵌：name/mac/up/running/speed_mb/duplex/mtu/kind/bound/role/rx_bytes/tx_bytes/ip_addrs
+	IfIndex        int      `json:"ifindex"`
+	Operstate      string   `json:"operstate"`       // /sys .../operstate（up/down/lowerlayerdown/…）
+	Carrier        bool     `json:"carrier"`         // /sys .../carrier == "1"
+	CarrierChanges int      `json:"carrier_changes"` // /sys .../carrier_changes
+	TxQueueLen     int      `json:"tx_queue_len"`
+	IfAlias        string   `json:"ifalias"`
+	Master         string   `json:"master"`       // 所属网桥（被 enslave 时），读 /sys .../master 符号链接 basename
+	BridgePorts    []string `json:"bridge_ports"` // 若自身是网桥：/sys .../brif/ 列表
+	VlanID         int      `json:"vlan_id,omitempty"`
+	VlanProto      string   `json:"vlan_proto,omitempty"`
+
+	// 以下 ethtool 尽力而为（未安装或解析失败留空，绝不报错）。
+	Driver          string   `json:"driver"`
+	DriverVersion   string   `json:"driver_version"`
+	Firmware        string   `json:"firmware"`
+	BusInfo         string   `json:"bus_info"`
+	PermMAC         string   `json:"perm_mac"`
+	Autoneg         string   `json:"autoneg"` // on | off | ""
+	Port            string   `json:"port"`    // Twisted Pair | Fibre | …
+	SupportedModes  []string `json:"supported_modes"`
+	AdvertisedModes []string `json:"advertised_modes"`
+
+	Stats NICStats  `json:"stats"`
+	Addrs []NICAddr `json:"addrs"` // 比 ip_addrs 更详细（family/prefix/scope）
+}
+
 // NetIface is a configured L3 network — a LAN or WAN (内网/外网) entry. Maps to
 // a UCI `config interface` (+ its `config device` bridge for LAN). snake_case.
 type NetIface struct {

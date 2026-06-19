@@ -354,9 +354,61 @@ export interface DHCPSvcInfo {
   pkg_manager: string;
 }
 
+// 网卡上的一个地址（比 NIC.ip_addrs 纯 CIDR 字符串更结构化），供详情页逐条展示。
+export interface NICAddr {
+  family: 'ipv4' | 'ipv6';
+  address: string; // 不含前缀，如 192.168.1.1
+  prefix: number;  // CIDR 位数
+  scope: string;   // global | link | host
+}
+
+// /sys/class/net/<name>/statistics 的收发计数明细。
+export interface NICStats {
+  rx_bytes: number;
+  tx_bytes: number;
+  rx_packets: number;
+  tx_packets: number;
+  rx_errors: number;
+  tx_errors: number;
+  rx_dropped: number;
+  tx_dropped: number;
+  multicast: number;
+  collisions: number;
+}
+
+// 单块网卡的综合详情（内嵌 NIC 全部字段 + sysfs 链路/统计 + 网桥从属 + VLAN + ethtool 驱动/链路能力）。
+export interface NICDetail extends NIC {
+  ifindex: number;
+  operstate: string;       // up/down/lowerlayerdown/…
+  carrier: boolean;        // carrier == "1"
+  carrier_changes: number;
+  tx_queue_len: number;
+  ifalias: string;
+  master: string;          // 所属网桥（被 enslave 时）
+  bridge_ports: string[] | null; // 若自身是网桥：成员端口列表
+  vlan_id?: number;
+  vlan_proto?: string;
+  // ethtool 尽力而为（未安装/解析失败留空）。
+  driver: string;
+  driver_version: string;
+  firmware: string;
+  bus_info: string;
+  perm_mac: string;
+  autoneg: string; // on | off | ""
+  port: string;    // Twisted Pair | Fibre | …
+  supported_modes: string[] | null;
+  advertised_modes: string[] | null;
+  stats: NICStats;
+  addrs: NICAddr[] | null; // 比 ip_addrs 更详细（family/prefix/scope）
+}
+
 export async function listNICs(): Promise<NIC[]> {
   const { data } = await client.get('/api/v1/nics');
   return data.items ?? [];
+}
+export async function getNICDetail(name: string): Promise<NICDetail> {
+  const { data } = await client.get('/api/v1/nics/' + encodeURIComponent(name));
+  return data;
 }
 export async function getNetOverview(): Promise<NetOverview> {
   const { data } = await client.get('/api/v1/netcfg/overview');

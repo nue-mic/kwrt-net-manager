@@ -221,10 +221,10 @@ func TestV6IsolationFromV4(t *testing.T) {
 
 func TestDuidToMAC(t *testing.T) {
 	cases := map[string]string{
-		"00030001f42d064fe3fb":         "f4:2d:06:4f:e3:fb", // DUID-LL
-		"000100015abc1234aabbccddeeff": "aa:bb:cc:dd:ee:ff", // DUID-LLT
-		"0004aabbccddeeff00112233445566": "",                // DUID-UUID → 无 MAC
-		"":                             "",
+		"00030001f42d064fe3fb":           "f4:2d:06:4f:e3:fb", // DUID-LL
+		"000100015abc1234aabbccddeeff":   "aa:bb:cc:dd:ee:ff", // DUID-LLT
+		"0004aabbccddeeff00112233445566": "",                  // DUID-UUID → 无 MAC
+		"":                               "",
 	}
 	for in, want := range cases {
 		if got := duidToMAC(in); got != want {

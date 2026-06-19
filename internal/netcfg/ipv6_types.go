@@ -167,7 +167,7 @@ type LineV6 struct {
 type DHCPv6SvcInfo struct {
 	OdhcpdInstalled bool   `json:"odhcpd_installed"` // /etc/init.d/odhcpd 存在
 	OdhcpdRunning   bool   `json:"odhcpd_running"`
-	IPFull          bool   `json:"ip_full"`        // ip 支持 neigh 子命令
-	PkgManager      string `json:"pkg_manager"`    // opkg | apk | ""
-	LanServerOn     bool   `json:"lan_server_on"`  // 是否已有 LAN 开启 dhcpv6=server
+	IPFull          bool   `json:"ip_full"`       // ip 支持 neigh 子命令
+	PkgManager      string `json:"pkg_manager"`   // opkg | apk | ""
+	LanServerOn     bool   `json:"lan_server_on"` // 是否已有 LAN 开启 dhcpv6=server
 }

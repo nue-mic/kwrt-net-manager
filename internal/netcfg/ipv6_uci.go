@@ -420,7 +420,8 @@ func importRaMgmt(v string) string {
 // ---- batch key helpers ----
 
 // setType declares a section type (no quotes), matching the IPv4 apply() style:
-//   set dhcp.foo=host
+//
+//	set dhcp.foo=host
 func setType(sb *strings.Builder, key, typ string) {
 	fmt.Fprintf(sb, "set %s=%s\n", key, typ)
 }

@@ -484,6 +484,26 @@ func TestNetIfacesReadsMultiIPv6(t *testing.T) {
 	}
 }
 
+func TestSaveNetIfaceWANClearsStaleIPv6(t *testing.T) {
+	for _, proto := range []string{ProtoDHCP, ProtoPPPoE} {
+		show := "network.wan=interface\nnetwork.wan.proto='static'\nnetwork.wan.device='eth1'\nnetwork.wan.ip6addr='fd00::1/64' '2001:db8::1/64'\n"
+		f := &fakeRunner{show: map[string]string{"dhcp": "", "network": show, "firewall": ""}}
+		be := newTestUCI(t, f)
+		in := NetIface{ID: "wan", Role: RoleWAN, Proto: proto, Device: "eth1"}
+		if proto == ProtoPPPoE {
+			in.Username = "u"
+			in.Password = "p"
+		}
+		if err := be.SaveNetIface(in); err != nil {
+			t.Fatal(err)
+		}
+		b := f.batchContaining("commit network")
+		if !strings.Contains(b, "delete network.wan.ip6addr") {
+			t.Errorf("proto=%s must clear stale ip6addr\n%s", proto, b)
+		}
+	}
+}
+
 func TestSaveNetIfacePPPoEv6Keepalive(t *testing.T) {
 	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": "", "firewall": ""}}
 	be := newTestUCI(t, f)

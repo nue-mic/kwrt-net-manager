@@ -398,7 +398,7 @@ func (b *uciBackend) SaveNetIface(in NetIface) error {
 			setOptOrDel(&sb, id, "ac", in.AC)
 			setOptOrDel(&sb, id, "keepalive", in.Keepalive)
 			setBoolOptOrDel(&sb, id, "ipv6", in.PPPoEv6)
-			delOpt(&sb, id, "ipaddr", "netmask", "gateway")
+			delOpt(&sb, id, "ipaddr", "netmask", "gateway", "ip6addr")
 		case ProtoStatic:
 			fmt.Fprintf(&sb, "set network.%s.proto='static'\n", id)
 			writeAddrList(&sb, id, in)
@@ -413,7 +413,7 @@ func (b *uciBackend) SaveNetIface(in NetIface) error {
 			}
 		default: // dhcp
 			fmt.Fprintf(&sb, "set network.%s.proto='dhcp'\n", id)
-			delOpt(&sb, id, "ipaddr", "netmask", "gateway", "username", "password")
+			delOpt(&sb, id, "ipaddr", "netmask", "gateway", "username", "password", "ip6addr")
 			fmt.Fprintf(&sb, "delete network.%s.dns\n", id)
 		}
 		dev := in.Device

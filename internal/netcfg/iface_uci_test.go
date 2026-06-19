@@ -318,6 +318,32 @@ func TestDeleteNetIfaceCleansUp(t *testing.T) {
 	}
 }
 
+func TestNetIfacesReadsMultiIP(t *testing.T) {
+	show := "network.lan=interface\nnetwork.lan.proto='static'\nnetwork.lan.device='br-lan'\n" +
+		"network.lan.ipaddr='192.168.1.1/24' '10.0.0.1/24'\n" +
+		"network.lan.metric='5'\nnetwork.lan.peerdns='0'\nnetwork.lan.ip6assign='60'\n" +
+		"network.dev_lan=device\nnetwork.dev_lan.type='bridge'\nnetwork.dev_lan.name='br-lan'\nnetwork.dev_lan.macaddr='AA:BB:CC:DD:EE:FF'\nnetwork.dev_lan.ports='eth1'\n"
+	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": show}}
+	be := newTestUCI(t, f)
+	ifaces, err := be.NetIfaces()
+	if err != nil {
+		t.Fatal(err)
+	}
+	lan := ifaces[0]
+	if lan.IPAddr != "192.168.1.1" || lan.Netmask != "255.255.255.0" {
+		t.Errorf("primary = %s/%s", lan.IPAddr, lan.Netmask)
+	}
+	if len(lan.ExtraAddrs) != 1 || lan.ExtraAddrs[0].Address != "10.0.0.1" || lan.ExtraAddrs[0].Prefix != 24 {
+		t.Errorf("extra addrs = %+v", lan.ExtraAddrs)
+	}
+	if lan.Metric != 5 || lan.PeerDNS == nil || *lan.PeerDNS != false || lan.IP6Assign != 60 {
+		t.Errorf("full fields = metric:%d peerdns:%v ip6assign:%d", lan.Metric, lan.PeerDNS, lan.IP6Assign)
+	}
+	if lan.CloneMAC != "AA:BB:CC:DD:EE:FF" {
+		t.Errorf("clone_mac from device = %q", lan.CloneMAC)
+	}
+}
+
 func TestSaveNetIfaceLANBridge(t *testing.T) {
 	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": sampleNetIfaceShow}}
 	be := newTestUCI(t, f)

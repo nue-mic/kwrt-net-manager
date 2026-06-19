@@ -226,14 +226,39 @@ func (b *uciBackend) NetIfaces() ([]NetIface, error) {
 			CloneMAC: first(s.opts["macaddr"]),
 		}
 		ni.DefaultGW = first(s.opts["defaultroute"]) != "0"
-		// addressing
-		ip := first(s.opts["ipaddr"])
-		if i := strings.IndexByte(ip, '/'); i >= 0 {
-			ni.IPAddr = ip[:i]
-			ni.Netmask = netutil.PrefixToMask(atoiSafe(ip[i+1:]))
-		} else {
-			ni.IPAddr = ip
-			ni.Netmask = first(s.opts["netmask"])
+		// 全量字段回读
+		ni.Metric = atoiSafe(first(s.opts["metric"]))
+		ni.PeerDNS = parseBoolOpt(s.opts["peerdns"])
+		ni.Broadcast = first(s.opts["broadcast"])
+		ni.ForceLink = parseBoolOpt(s.opts["force_link"])
+		ni.Auto = parseBoolOpt(s.opts["auto"])
+		ni.IP6Assign = atoiSafe(first(s.opts["ip6assign"]))
+		ni.IP6Hint = first(s.opts["ip6hint"])
+		ni.IP6Addr = first(s.opts["ip6addr"])
+		ni.IP6Gw = first(s.opts["ip6gw"])
+		// addressing: 优先 list ipaddr（多条 CIDR），回退 option ipaddr+netmask。
+		// parseUci 对 option 与 list 同名都收进切片，第一条为主、其余进 ExtraAddrs。
+		addrs := s.opts["ipaddr"]
+		if len(addrs) > 0 {
+			for idx, raw := range addrs {
+				a, mask := raw, ""
+				prefix := 0
+				if j := strings.IndexByte(raw, '/'); j >= 0 {
+					a = raw[:j]
+					prefix = atoiSafe(raw[j+1:])
+					mask = netutil.PrefixToMask(prefix)
+				} else {
+					mask = first(s.opts["netmask"])
+					if p, ok := netutil.MaskToPrefix(mask); ok {
+						prefix = p
+					}
+				}
+				if idx == 0 {
+					ni.IPAddr, ni.Netmask = a, mask
+				} else {
+					ni.ExtraAddrs = append(ni.ExtraAddrs, IfaceAddr{Address: a, Prefix: prefix, Family: FamilyIPv4, Enabled: true})
+				}
+			}
 		}
 		dns := s.opts["dns"]
 		if len(dns) > 0 {
@@ -248,11 +273,18 @@ func (b *uciBackend) NetIfaces() ([]NetIface, error) {
 		} else if ni.Device != "" {
 			ni.Ports = []string{ni.Device}
 		}
+		// clone_mac: 优先 device 段的 macaddr，回退 interface 段（上面的字面量已置默认）
+		if devSec := b.deviceSectionByName(ni.Device); devSec != "" {
+			if m := b.deviceMacAddr(devSec); m != "" {
+				ni.CloneMAC = m
+			}
+		}
 		// runtime
 		if st, ok := b.ifaceStatus(s.name); ok {
 			ni.Up = st.up
 			ni.RuntimeIP = st.ip
 		}
+		mergeExtraRemarks(&ni, b.storeBackend)
 		out = append(out, ni)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
@@ -492,6 +524,52 @@ func (b *uciBackend) deviceSectionByName(dev string) string {
 		}
 	}
 	return ""
+}
+
+// parseBoolOpt 把 uci 选项值（"0"/"1"/缺失）转成 *bool（缺失→nil）。
+func parseBoolOpt(vals []string) *bool {
+	v := first(vals)
+	if v == "" {
+		return nil
+	}
+	b := v != "0"
+	return &b
+}
+
+// deviceMacAddr 读某个 device 段的 macaddr 选项。
+func (b *uciBackend) deviceMacAddr(section string) string {
+	show, err := b.uciShow("network")
+	if err != nil {
+		return ""
+	}
+	for _, s := range parseUci(show, "network") {
+		if s.name == section {
+			return first(s.opts["macaddr"])
+		}
+	}
+	return ""
+}
+
+// mergeExtraRemarks 用旁车 store 里同 id+地址的备注，回填到从 UCI 读出的附加 IP。
+func mergeExtraRemarks(ni *NetIface, sb *storeBackend) {
+	stored, _ := sb.NetIfaces()
+	for _, s := range stored {
+		if s.ID != ni.ID {
+			continue
+		}
+		rem := map[string]string{}
+		for _, a := range s.ExtraAddrs {
+			if a.Remark != "" {
+				rem[a.Address] = a.Remark
+			}
+		}
+		for i := range ni.ExtraAddrs {
+			if r, ok := rem[ni.ExtraAddrs[i].Address]; ok {
+				ni.ExtraAddrs[i].Remark = r
+			}
+		}
+		return
+	}
 }
 
 // ensureDeviceMAC 把克隆 MAC 写到接口对应的 `config device` 段（DSA 正确位置）。

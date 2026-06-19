@@ -162,6 +162,40 @@ func TestSaveNetIfaceLANSingleNIC(t *testing.T) {
 	}
 }
 
+func TestSaveNetIfaceMultiIP(t *testing.T) {
+	// 旧接口是单 option ipaddr，升级为多 IP，必须先清残留再统一 list。
+	show := "network.lan=interface\nnetwork.lan.proto='static'\nnetwork.lan.device='br-lan'\nnetwork.lan.ipaddr='192.168.1.1'\nnetwork.lan.netmask='255.255.255.0'\n"
+	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": show, "firewall": ""}}
+	be := newTestUCI(t, f)
+	err := be.SaveNetIface(NetIface{
+		ID: "lan", Role: RoleLAN, Device: "br-lan", Ports: []string{"eth1"},
+		IPAddr: "192.168.1.1", Netmask: "255.255.255.0",
+		ExtraAddrs: []IfaceAddr{
+			{Address: "10.0.0.1", Prefix: 24, Family: "ipv4", Enabled: true},
+			{Address: "172.16.0.1", Prefix: 16, Family: "ipv4", Enabled: true},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := f.batchContaining("commit network")
+	for _, w := range []string{
+		"delete network.lan.ipaddr",
+		"delete network.lan.netmask",
+		"add_list network.lan.ipaddr='192.168.1.1/24'",
+		"add_list network.lan.ipaddr='10.0.0.1/24'",
+		"add_list network.lan.ipaddr='172.16.0.1/16'",
+	} {
+		if !strings.Contains(b, w) {
+			t.Errorf("multi-IP batch missing %q\n--- batch ---\n%s", w, b)
+		}
+	}
+	// 不能再写 option 形式
+	if strings.Contains(b, "set network.lan.ipaddr=") || strings.Contains(b, "set network.lan.netmask=") {
+		t.Errorf("must not write option ipaddr/netmask alongside list\n%s", b)
+	}
+}
+
 func TestSaveNetIfaceLANBridge(t *testing.T) {
 	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": sampleNetIfaceShow}}
 	be := newTestUCI(t, f)
@@ -177,7 +211,7 @@ func TestSaveNetIfaceLANBridge(t *testing.T) {
 	for _, w := range []string{
 		"set network.lan.proto='static'",
 		"set network.lan.device='br-lan'",
-		"set network.lan.ipaddr='192.168.9.1'",
+		"add_list network.lan.ipaddr='192.168.9.1/24'",
 		"set network.dev_lan.type='bridge'", // reused existing bridge section
 		"set network.dev_lan.name='br-lan'",
 		"add_list network.dev_lan.ports='eth1'",

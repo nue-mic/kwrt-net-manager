@@ -295,6 +295,8 @@ func (b *uciBackend) ifaceStatus(id string) (ifStatus, bool) {
 
 func (b *uciBackend) SaveNetIface(in NetIface) error {
 	id := uciName(in.ID)
+	// 旁车权威：先把整条 NetIface（含附加 IP 备注）存进内嵌 store，再投射 UCI。
+	_ = b.storeBackend.SaveNetIface(in)
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "set network.%s=interface\n", id)
 
@@ -326,12 +328,7 @@ func (b *uciBackend) SaveNetIface(in NetIface) error {
 			}
 			fmt.Fprintf(&sb, "set network.%s.device='%s'\n", id, dev)
 		}
-		if in.IPAddr != "" {
-			fmt.Fprintf(&sb, "set network.%s.ipaddr='%s'\n", id, in.IPAddr)
-		}
-		if in.Netmask != "" {
-			fmt.Fprintf(&sb, "set network.%s.netmask='%s'\n", id, in.Netmask)
-		}
+		writeAddrList(&sb, id, in)
 	} else {
 		// WAN
 		switch in.Proto {
@@ -344,8 +341,7 @@ func (b *uciBackend) SaveNetIface(in NetIface) error {
 			delOpt(&sb, id, "ipaddr", "netmask", "gateway")
 		case ProtoStatic:
 			fmt.Fprintf(&sb, "set network.%s.proto='static'\n", id)
-			setOpt(&sb, id, "ipaddr", in.IPAddr)
-			setOpt(&sb, id, "netmask", in.Netmask)
+			writeAddrList(&sb, id, in)
 			setOptOrDel(&sb, id, "gateway", in.Gateway)
 			delOpt(&sb, id, "username", "password")
 			fmt.Fprintf(&sb, "delete network.%s.dns\n", id)
@@ -541,6 +537,27 @@ func firstOf(a, b []string) string {
 
 func setOpt(sb *strings.Builder, id, opt, val string) {
 	fmt.Fprintf(sb, "set network.%s.%s='%s'\n", id, opt, val)
+}
+
+// writeAddrList 把主 IP + 启用的附加 IP 统一投射为 `list ipaddr`（CIDR）。
+// 先 delete 清掉任意旧的 option/list 形式（二者不能并存），再逐条 add_list。
+// 主 IP 永远是第一条。
+func writeAddrList(sb *strings.Builder, id string, in NetIface) {
+	fmt.Fprintf(sb, "delete network.%s.ipaddr\n", id)
+	fmt.Fprintf(sb, "delete network.%s.netmask\n", id)
+	if in.IPAddr != "" {
+		p, ok := netutil.MaskToPrefix(in.Netmask)
+		if !ok {
+			p = 24
+		}
+		fmt.Fprintf(sb, "add_list network.%s.ipaddr='%s/%d'\n", id, in.IPAddr, p)
+	}
+	for _, a := range in.ExtraAddrs {
+		if !a.Enabled || a.Address == "" {
+			continue
+		}
+		fmt.Fprintf(sb, "add_list network.%s.ipaddr='%s/%d'\n", id, a.Address, a.Prefix)
+	}
 }
 
 func setOptOrDel(sb *strings.Builder, id, opt, val string) {

@@ -14,15 +14,6 @@ import * as net from '../api/netcfg';
 
 const { Text, Paragraph } = Typography;
 
-const PREFIXES = [
-  { v: 24, t: '/24 (255.255.255.0)' }, { v: 16, t: '/16 (255.255.0.0)' },
-  { v: 8, t: '/8 (255.0.0.0)' }, { v: 25, t: '/25' }, { v: 26, t: '/26' },
-  { v: 23, t: '/23' }, { v: 22, t: '/22' }, { v: 30, t: '/30' },
-];
-
-// IPv6 附加地址常用前缀长度。
-const PREFIXES6 = [64, 56, 48, 60, 128];
-
 function maskToPrefix(mask: string): number {
   const m = mask.split('.').map(Number);
   if (m.length !== 4 || m.some((x) => isNaN(x))) return 24;
@@ -33,6 +24,15 @@ function prefixToMask(p: number): string {
   const o = [0, 0, 0, 0].map((_, i) => (i < full ? 255 : i === full ? 256 - 2 ** (8 - rem) : 0));
   return o.join('.');
 }
+
+// IPv4 子网掩码：完整列出 /8–/32（点分十进制，覆盖所有常用网段），再附 /1–/7 超大网段，求全面。
+const PREFIXES = [
+  ...Array.from({ length: 25 }, (_, i) => i + 8), // /8 ~ /32
+  ...Array.from({ length: 7 }, (_, i) => i + 1),  // /1 ~ /7
+].map((v) => ({ v, t: `/${v} (${prefixToMask(v)})` }));
+
+// IPv6 前缀长度：覆盖常用子网边界（/64 为标准），尽量全面。
+const PREFIXES6 = [128, 127, 126, 125, 124, 120, 116, 112, 104, 96, 88, 80, 72, 68, 64, 60, 58, 56, 52, 48, 44, 40, 36, 32, 28, 24, 20, 16, 12, 8];
 
 export default function NetOverview() {
   const { message } = App.useApp();
@@ -492,7 +492,7 @@ function IfaceDrawer({ open, role, editing, nics, onClose, onSaved, onAction, on
                               : PREFIXES.map((p) => ({ value: p.v, label: '/' + p.v }));
                             return (
                               <Form.Item {...rest} name={[name, 'prefix']} noStyle initialValue={24}>
-                                <Select style={{ width: 110 }} options={opts} />
+                                <Select showSearch optionFilterProp="label" style={{ width: 110 }} options={opts} />
                               </Form.Item>
                             );
                           }}

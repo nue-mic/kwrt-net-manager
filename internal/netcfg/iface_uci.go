@@ -373,6 +373,7 @@ func (b *uciBackend) SaveNetIface(in NetIface) error {
 		fmt.Fprintf(&sb, "set network.%s.mtu='%d'\n", id, in.MTU)
 	}
 	setOptOrDel(&sb, id, "remark", in.Remark)
+	writeIfaceExtraOpts(&sb, id, in)
 	sb.WriteString("commit network\n")
 
 	if out, err := b.run.Run(sb.String(), "uci", "batch"); err != nil {
@@ -572,6 +573,40 @@ func delOpt(sb *strings.Builder, id string, opts ...string) {
 	for _, o := range opts {
 		fmt.Fprintf(sb, "delete network.%s.%s\n", id, o)
 	}
+}
+
+// setBoolOptOrDel 写一个布尔型 option（nil→删除；否则 '0'/'1'）。
+func setBoolOptOrDel(sb *strings.Builder, id, opt string, v *bool) {
+	if v == nil {
+		fmt.Fprintf(sb, "delete network.%s.%s\n", id, opt)
+		return
+	}
+	val := "0"
+	if *v {
+		val = "1"
+	}
+	fmt.Fprintf(sb, "set network.%s.%s='%s'\n", id, opt, val)
+}
+
+// writeIfaceExtraOpts 投射 OpenWrt 接口全量对齐字段（空/0/nil 即删除回归默认）。
+func writeIfaceExtraOpts(sb *strings.Builder, id string, in NetIface) {
+	if in.Metric > 0 {
+		fmt.Fprintf(sb, "set network.%s.metric='%d'\n", id, in.Metric)
+	} else {
+		fmt.Fprintf(sb, "delete network.%s.metric\n", id)
+	}
+	setBoolOptOrDel(sb, id, "peerdns", in.PeerDNS)
+	setOptOrDel(sb, id, "broadcast", in.Broadcast)
+	setBoolOptOrDel(sb, id, "force_link", in.ForceLink)
+	setBoolOptOrDel(sb, id, "auto", in.Auto)
+	if in.IP6Assign > 0 {
+		fmt.Fprintf(sb, "set network.%s.ip6assign='%d'\n", id, in.IP6Assign)
+	} else {
+		fmt.Fprintf(sb, "delete network.%s.ip6assign\n", id)
+	}
+	setOptOrDel(sb, id, "ip6hint", in.IP6Hint)
+	setOptOrDel(sb, id, "ip6addr", in.IP6Addr)
+	setOptOrDel(sb, id, "ip6gw", in.IP6Gw)
 }
 
 // ---- DHCP service info + 一键安装 dnsmasq ----

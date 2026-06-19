@@ -196,6 +196,37 @@ func TestSaveNetIfaceMultiIP(t *testing.T) {
 	}
 }
 
+func TestSaveNetIfaceFullFields(t *testing.T) {
+	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": "", "firewall": ""}}
+	be := newTestUCI(t, f)
+	peer := false
+	auto := true
+	err := be.SaveNetIface(NetIface{
+		ID: "wan", Role: RoleWAN, Proto: ProtoStatic, Device: "eth0",
+		IPAddr: "1.1.1.2", Netmask: "255.255.255.0", Gateway: "1.1.1.1",
+		Metric: 10, PeerDNS: &peer, Auto: &auto, Broadcast: "1.1.1.255",
+		IP6Assign: 60, IP6Hint: "10", IP6Addr: "2001:db8::1/64", IP6Gw: "2001:db8::1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := f.batchContaining("commit network")
+	for _, w := range []string{
+		"set network.wan.metric='10'",
+		"set network.wan.peerdns='0'",
+		"set network.wan.auto='1'",
+		"set network.wan.broadcast='1.1.1.255'",
+		"set network.wan.ip6assign='60'",
+		"set network.wan.ip6hint='10'",
+		"set network.wan.ip6addr='2001:db8::1/64'",
+		"set network.wan.ip6gw='2001:db8::1'",
+	} {
+		if !strings.Contains(b, w) {
+			t.Errorf("full-fields batch missing %q\n--- batch ---\n%s", w, b)
+		}
+	}
+}
+
 func TestSaveNetIfaceLANBridge(t *testing.T) {
 	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": sampleNetIfaceShow}}
 	be := newTestUCI(t, f)

@@ -196,7 +196,12 @@ func CloneState(s State) State {
 	out.ACL = ACL{Mode: s.ACL.Mode, Entries: append([]ACLEntry(nil), s.ACL.Entries...)}
 	out.NetIfaces = append([]NetIface(nil), s.NetIfaces...)
 	for i := range out.NetIfaces {
-		out.NetIfaces[i].Ports = append([]string(nil), s.NetIfaces[i].Ports...)
+		src := s.NetIfaces[i]
+		out.NetIfaces[i].Ports = append([]string(nil), src.Ports...)
+		out.NetIfaces[i].ExtraAddrs = append([]IfaceAddr(nil), src.ExtraAddrs...)
+		out.NetIfaces[i].PeerDNS = cloneBoolPtr(src.PeerDNS)
+		out.NetIfaces[i].ForceLink = cloneBoolPtr(src.ForceLink)
+		out.NetIfaces[i].Auto = cloneBoolPtr(src.Auto)
 	}
 	out.WANv6s = append([]WANv6(nil), s.WANv6s...)
 	out.LANv6s = append([]LANv6(nil), s.LANv6s...)
@@ -224,4 +229,13 @@ func cloneStrMap(m map[string]string) map[string]string {
 		out[k] = v
 	}
 	return out
+}
+
+// cloneBoolPtr 深拷贝一个 *bool（nil 仍 nil），避免快照间共享同一底层 bool。
+func cloneBoolPtr(p *bool) *bool {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
 }

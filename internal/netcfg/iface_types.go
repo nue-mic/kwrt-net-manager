@@ -59,9 +59,33 @@ type NetIface struct {
 	CloneMAC  string `json:"clone_mac"`  // 克隆MAC
 	Remark    string `json:"remark"`     // 备注
 
+	// ExtraAddrs 是附加 IP（次地址/管理地址，可同/异子网）。投射为 list ipaddr。
+	// per-IP 的 remark 旁车权威（uci 无此字段）。不发 DHCP（见设计 §4.4）。
+	ExtraAddrs []IfaceAddr `json:"extra_addrs"`
+
+	// OpenWrt 接口全量对齐（默认折叠在前端「高级」）。
+	Metric    int    `json:"metric,omitempty"`     // option metric，多 WAN 优先级（越小越优先）
+	PeerDNS   *bool  `json:"peerdns,omitempty"`    // option peerdns（nil=默认）
+	Broadcast string `json:"broadcast,omitempty"`  // option broadcast（static 广播地址）
+	ForceLink *bool  `json:"force_link,omitempty"` // option force_link（无链路也配地址）
+	Auto      *bool  `json:"auto,omitempty"`       // option auto（开机自启，nil/true=默认）
+	IP6Assign int    `json:"ip6assign,omitempty"`  // option ip6assign（委派前缀长度，0=不设）
+	IP6Hint   string `json:"ip6hint,omitempty"`    // option ip6hint（hex 子前缀 ID）
+	IP6Addr   string `json:"ip6addr,omitempty"`    // option ip6addr（单条静态 IPv6/CIDR）
+	IP6Gw     string `json:"ip6gw,omitempty"`      // option ip6gw（IPv6 默认网关）
+
 	// Runtime (read-only): is the interface up and what address it actually got.
 	Up        bool   `json:"up"`
 	RuntimeIP string `json:"runtime_ip"`
+}
+
+// IfaceAddr 是接口上的一个附加 IP。落地 OpenWrt `list ipaddr '<address>/<prefix>'`。
+type IfaceAddr struct {
+	Address string `json:"address"` // 点分 IPv4，如 10.0.0.1
+	Prefix  int    `json:"prefix"`  // CIDR 位数，如 24
+	Family  string `json:"family"`  // 本期固定 "ipv4"；预留 "ipv6"
+	Remark  string `json:"remark"`  // 备注（仅旁车）
+	Enabled bool   `json:"enabled"` // 关闭=不投射（本期 UI 不暴露禁用，默认 true）
 }
 
 // Net interface roles / protos.

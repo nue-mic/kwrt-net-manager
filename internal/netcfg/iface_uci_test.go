@@ -268,6 +268,34 @@ func TestSaveNetIfaceCloneMACOnBridge(t *testing.T) {
 	}
 }
 
+func TestSaveNetIfaceJoinsFirewallZone(t *testing.T) {
+	fw := "firewall.lanzone=zone\nfirewall.lanzone.name='lan'\nfirewall.lanzone.network='lan'\n" +
+		"firewall.wanzone=zone\nfirewall.wanzone.name='wan'\nfirewall.wanzone.network='wan' 'wan6'\n"
+	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": "", "firewall": fw}}
+	be := newTestUCI(t, f)
+	// 新建 lan2 → 自动进 lan zone
+	if err := be.SaveNetIface(NetIface{ID: "lan2", Role: RoleLAN, Device: "eth3", Ports: []string{"eth3"}, IPAddr: "192.168.5.1", Netmask: "255.255.255.0"}); err != nil {
+		t.Fatal(err)
+	}
+	fwb := f.batchContaining("commit firewall")
+	if !strings.Contains(fwb, "add_list firewall.lanzone.network='lan2'") {
+		t.Errorf("lan2 should join lan zone\n%s", fwb)
+	}
+}
+
+func TestSaveMainLANSkipsZone(t *testing.T) {
+	fw := "firewall.lanzone=zone\nfirewall.lanzone.name='lan'\nfirewall.lanzone.network='lan'\n"
+	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": "", "firewall": fw}}
+	be := newTestUCI(t, f)
+	if err := be.SaveNetIface(NetIface{ID: "lan", Role: RoleLAN, Device: "eth1", Ports: []string{"eth1"}, IPAddr: "192.168.1.1", Netmask: "255.255.255.0"}); err != nil {
+		t.Fatal(err)
+	}
+	// main lan 已在默认 zone：不应发起任何 firewall commit（batchContaining 未命中返回空串）。
+	if f.batchContaining("commit firewall") != "" {
+		t.Error("main lan already in zone, must not touch firewall")
+	}
+}
+
 func TestSaveNetIfaceLANBridge(t *testing.T) {
 	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": sampleNetIfaceShow}}
 	be := newTestUCI(t, f)

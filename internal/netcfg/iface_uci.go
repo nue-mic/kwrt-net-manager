@@ -389,6 +389,7 @@ func (b *uciBackend) SaveNetIface(in NetIface) error {
 	if initdExists("network") {
 		_, _ = b.run.Run("", "/etc/init.d/network", "reload")
 	}
+	b.ensureZoneMembership(id, in.Role)
 	return nil
 }
 
@@ -514,6 +515,96 @@ func (b *uciBackend) ensureDeviceMAC(sb *strings.Builder, id, dev, mac string) {
 		fmt.Fprintf(sb, "set network.%s.%s='%s'\n", devSec, managedOpt, managedMarker)
 	}
 	fmt.Fprintf(sb, "set network.%s.macaddr='%s'\n", devSec, mac)
+}
+
+// firewallZoneForRole 按“成员含 lan/wan”定位接口角色的默认防火墙 zone 段名（非按名字）。
+func (b *uciBackend) firewallZoneForRole(role string) string {
+	canonical := "lan"
+	if role == RoleWAN {
+		canonical = "wan"
+	}
+	show, err := b.uciShow("firewall")
+	if err != nil {
+		return ""
+	}
+	for _, s := range parseUci(show, "firewall") {
+		if s.typ != "zone" {
+			continue
+		}
+		for _, n := range s.opts["network"] {
+			if n == canonical {
+				return s.name
+			}
+		}
+	}
+	return ""
+}
+
+// ensureZoneMembership 把新建独立接口 id 并入其角色默认 zone（G1）。主 lan/wan 已在
+// 默认 zone，跳过；找不到 zone 则置 pending 提示。best-effort，reload 失败置 pending。
+func (b *uciBackend) ensureZoneMembership(id, role string) {
+	if id == "lan" || id == "wan" {
+		return
+	}
+	zsec := b.firewallZoneForRole(role)
+	if zsec == "" {
+		b.pending = true
+		b.pendingMsg = "接口 " + id + " 已配置，但未找到匹配的防火墙区域，请手动将其加入防火墙区域后才能转发/上网"
+		return
+	}
+	// 已是成员则跳过
+	show, _ := b.uciShow("firewall")
+	for _, s := range parseUci(show, "firewall") {
+		if s.name == zsec {
+			for _, n := range s.opts["network"] {
+				if n == id {
+					return
+				}
+			}
+		}
+	}
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "add_list firewall.%s.network='%s'\n", zsec, id)
+	sb.WriteString("commit firewall\n")
+	if out, err := b.run.Run(sb.String(), "uci", "batch"); err != nil {
+		b.pending = true
+		b.pendingMsg = "防火墙区域更新失败：" + strings.TrimSpace(out)
+		return
+	}
+	if initdExists("firewall") {
+		if _, err := b.run.Run("", "/etc/init.d/firewall", "reload"); err != nil {
+			b.pending = true
+			b.pendingMsg = "已保存，但防火墙 reload 失败，请重试"
+		}
+	}
+}
+
+// removeIfaceFromZones 删接口时从所有 zone 的 network 列表移除该接口名（只动自己的 id）。
+func (b *uciBackend) removeIfaceFromZones(id string) {
+	show, err := b.uciShow("firewall")
+	if err != nil {
+		return
+	}
+	var sb strings.Builder
+	changed := false
+	for _, s := range parseUci(show, "firewall") {
+		if s.typ != "zone" {
+			continue
+		}
+		for _, n := range s.opts["network"] {
+			if n == id {
+				fmt.Fprintf(&sb, "del_list firewall.%s.network='%s'\n", s.name, id)
+				changed = true
+			}
+		}
+	}
+	if !changed {
+		return
+	}
+	sb.WriteString("commit firewall\n")
+	if _, err := b.run.Run(sb.String(), "uci", "batch"); err == nil && initdExists("firewall") {
+		_, _ = b.run.Run("", "/etc/init.d/firewall", "reload")
+	}
 }
 
 func (b *uciBackend) DeleteNetIface(id string) error {

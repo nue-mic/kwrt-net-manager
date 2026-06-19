@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Alert, App, Button, Card, Checkbox, Col, Drawer, Form, Input, InputNumber,
+  Alert, App, Button, Card, Checkbox, Col, Collapse, Drawer, Form, Input, InputNumber,
   Modal, Popconfirm, Radio, Row, Select, Space, Statistic, Switch, Tag, Tooltip, Typography,
 } from 'antd';
 import {
@@ -13,7 +13,22 @@ import * as net from '../api/netcfg';
 
 const { Text, Paragraph } = Typography;
 
-const MASKS = ['255.255.255.0', '255.255.254.0', '255.255.252.0', '255.255.248.0', '255.255.240.0', '255.255.224.0', '255.255.192.0', '255.255.128.0', '255.255.0.0', '255.0.0.0'];
+const PREFIXES = [
+  { v: 24, t: '/24 (255.255.255.0)' }, { v: 16, t: '/16 (255.255.0.0)' },
+  { v: 8, t: '/8 (255.0.0.0)' }, { v: 25, t: '/25' }, { v: 26, t: '/26' },
+  { v: 23, t: '/23' }, { v: 22, t: '/22' }, { v: 30, t: '/30' },
+];
+
+function maskToPrefix(mask: string): number {
+  const m = mask.split('.').map(Number);
+  if (m.length !== 4 || m.some((x) => isNaN(x))) return 24;
+  return m.reduce((acc, o) => acc + (o.toString(2).match(/1/g)?.length || 0), 0);
+}
+function prefixToMask(p: number): string {
+  const full = Math.floor(p / 8), rem = p % 8;
+  const o = [0, 0, 0, 0].map((_, i) => (i < full ? 255 : i === full ? 256 - 2 ** (8 - rem) : 0));
+  return o.join('.');
+}
 
 export default function NetOverview() {
   const { message } = App.useApp();
@@ -159,7 +174,6 @@ export default function NetOverview() {
         role={drawer.role}
         editing={drawer.editing}
         nics={nics}
-        masks={MASKS}
         onClose={() => setDrawer((d) => ({ ...d, open: false }))}
         onSaved={() => { setDrawer((d) => ({ ...d, open: false })); reload(); }}
         onAction={onAction}
@@ -210,14 +224,13 @@ interface DrawerProps {
   role: 'lan' | 'wan';
   editing: net.NetIface | null;
   nics: net.NIC[];
-  masks: string[];
   onClose: () => void;
   onSaved: () => void;
   onAction: (id: string, action: 'connect' | 'disconnect' | 'restart') => void;
   onDelete: (id: string) => void;
 }
 
-function IfaceDrawer({ open, role, editing, nics, masks, onClose, onSaved, onAction, onDelete }: DrawerProps) {
+function IfaceDrawer({ open, role, editing, nics, onClose, onSaved, onAction, onDelete }: DrawerProps) {
   const { message } = App.useApp();
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
@@ -230,16 +243,22 @@ function IfaceDrawer({ open, role, editing, nics, masks, onClose, onSaved, onAct
     if (!open) return;
     if (editing) {
       form.setFieldsValue({
-        id: editing.id, proto: editing.proto, ipaddr: editing.ipaddr, netmask: editing.netmask || '255.255.255.0',
+        id: editing.id, proto: editing.proto, ipaddr: editing.ipaddr,
+        prefix: editing.netmask ? maskToPrefix(editing.netmask) : 24,
         gateway: editing.gateway, dns_primary: editing.dns_primary, dns_secondary: editing.dns_secondary,
         username: editing.username, password: editing.password, service: editing.service, ac: editing.ac,
         mtu: editing.mtu || 1500, default_gw: editing.default_gw, remark: editing.remark,
         ports: editing.ports, device: editing.device, clone_mac: editing.clone_mac,
+        extra_addrs: editing.extra_addrs || [],
+        metric: editing.metric || 0, peerdns: editing.peerdns ?? undefined,
+        broadcast: editing.broadcast || '', force_link: editing.force_link ?? undefined,
+        auto: editing.auto ?? undefined, ip6assign: editing.ip6assign || 0,
+        ip6hint: editing.ip6hint || '', ip6addr: editing.ip6addr || '', ip6gw: editing.ip6gw || '',
       });
     } else {
       form.setFieldsValue({
-        id: '', proto: role === 'wan' ? 'dhcp' : 'static', netmask: '255.255.255.0',
-        mtu: 1500, default_gw: true, ports: [], device: '',
+        id: '', proto: role === 'wan' ? 'dhcp' : 'static', prefix: 24,
+        mtu: 1500, default_gw: true, ports: [], device: '', extra_addrs: [],
         ipaddr: role === 'lan' ? '192.168.2.1' : '',
       });
     }
@@ -253,7 +272,25 @@ function IfaceDrawer({ open, role, editing, nics, masks, onClose, onSaved, onAct
     } catch {
       return;
     }
+    // G3：编辑「当前内网」且改了主 IP/子网时二次确认（保存后可能短暂断连）
+    const ipChanged =
+      editing != null && role === 'lan' &&
+      (v.ipaddr !== editing.ipaddr || (v.ipaddr ? prefixToMask(v.prefix || 24) : '') !== editing.netmask);
+    if (ipChanged) {
+      const go = await new Promise<boolean>((res) => {
+        Modal.confirm({
+          title: '更改内网管理地址',
+          content: `将把 ${editing!.ipaddr} 改为 ${v.ipaddr}/${v.prefix}。保存后本机网络会重载，当前页面可能短暂断连，请用新地址 ${v.ipaddr} 重新访问。确定继续？`,
+          okText: '确定更改', cancelText: '取消',
+          onOk: () => res(true), onCancel: () => res(false),
+        });
+      });
+      if (!go) return;
+    }
     const ports: string[] = v.ports || [];
+    const extra: net.IfaceAddr[] = (v.extra_addrs || [])
+      .filter((a: any) => a && a.address)
+      .map((a: any) => ({ address: a.address, prefix: a.prefix || 24, family: 'ipv4' as const, remark: a.remark || '', enabled: true }));
     const body: net.NetIfaceInput = {
       id: editing?.id || v.id || '',
       name: editing?.name || v.id || '',
@@ -262,7 +299,7 @@ function IfaceDrawer({ open, role, editing, nics, masks, onClose, onSaved, onAct
       device: role === 'wan' ? (ports[0] || v.device || '') : (editing?.device || ''),
       ports,
       ipaddr: v.ipaddr || '',
-      netmask: v.netmask || '',
+      netmask: v.ipaddr ? prefixToMask(v.prefix || 24) : '',
       gateway: v.gateway || '',
       dns_primary: v.dns_primary || '',
       dns_secondary: v.dns_secondary || '',
@@ -274,12 +311,23 @@ function IfaceDrawer({ open, role, editing, nics, masks, onClose, onSaved, onAct
       default_gw: !!v.default_gw,
       clone_mac: v.clone_mac || '',
       remark: v.remark || '',
+      extra_addrs: extra,
+      metric: v.metric || 0,
+      peerdns: v.peerdns,
+      broadcast: v.broadcast || '',
+      force_link: v.force_link,
+      auto: v.auto,
+      ip6assign: v.ip6assign || 0,
+      ip6hint: v.ip6hint || '',
+      ip6addr: v.ip6addr || '',
+      ip6gw: v.ip6gw || '',
     };
     setSaving(true);
     try {
       if (editing) await net.updateNetIface(editing.id, body);
       else await net.createNetIface(body);
-      message.success('已保存（已下发并重载网络）');
+      if (ipChanged) message.success(`已保存，若无法访问请用新地址 ${v.ipaddr} 打开`);
+      else message.success('已保存（已下发并重载网络）');
       onSaved();
     } catch (e) {
       message.error('保存失败：' + extractErr(e));
@@ -388,10 +436,32 @@ function IfaceDrawer({ open, role, editing, nics, masks, onClose, onSaved, onAct
             <Form.Item label="IP 地址" name="ipaddr" rules={[{ required: true, message: '请输入 IP 地址' }]}>
               <Input placeholder="192.168.2.1" />
             </Form.Item>
-            <Form.Item label="子网掩码" name="netmask">
-              <Select showSearch>
-                {masks.map((m) => <Select.Option key={m} value={m}>{m}</Select.Option>)}
-              </Select>
+            <Form.Item label="子网掩码" name="prefix">
+              <Select showSearch optionFilterProp="label"
+                options={PREFIXES.map((p) => ({ value: p.v, label: p.t }))} />
+            </Form.Item>
+            <Form.Item label="附加 IP" tooltip="同接口的次地址，可同/异子网，仅作管理/路由，不发 DHCP；需发地址请新建内网口">
+              <Form.List name="extra_addrs">
+                {(fields, { add, remove }) => (
+                  <Space direction="vertical" style={{ width: '100%' }} size={6}>
+                    {fields.map(({ key, name, ...rest }) => (
+                      <Space key={key} align="baseline" wrap>
+                        <Form.Item {...rest} name={[name, 'address']} noStyle rules={[{ required: true, message: 'IP' }]}>
+                          <Input placeholder="10.0.0.1" style={{ width: 150 }} />
+                        </Form.Item>
+                        <Form.Item {...rest} name={[name, 'prefix']} noStyle initialValue={24}>
+                          <Select style={{ width: 110 }} options={PREFIXES.map((p) => ({ value: p.v, label: '/' + p.v }))} />
+                        </Form.Item>
+                        <Form.Item {...rest} name={[name, 'remark']} noStyle>
+                          <Input placeholder="备注" style={{ width: 120 }} />
+                        </Form.Item>
+                        <DeleteOutlined onClick={() => remove(name)} />
+                      </Space>
+                    ))}
+                    <Button type="dashed" onClick={() => add({ prefix: 24 })} icon={<PlusOutlined />} block>新增附加 IP</Button>
+                  </Space>
+                )}
+              </Form.List>
             </Form.Item>
             {role === 'wan' && (
               <Form.Item label="网关" name="gateway">
@@ -424,15 +494,39 @@ function IfaceDrawer({ open, role, editing, nics, masks, onClose, onSaved, onAct
           </Form.Item>
         )}
 
-        <Form.Item label="MTU" name="mtu">
-          <InputNumber min={576} max={9200} style={{ width: 160 }} />
-        </Form.Item>
-        <Form.Item label="克隆 MAC" name="clone_mac" tooltip="留空使用网卡原 MAC">
-          <Input placeholder="留空不克隆" />
-        </Form.Item>
-        <Form.Item label="备注" name="remark">
-          <Input />
-        </Form.Item>
+        <Collapse ghost items={[{
+          key: 'adv', label: '高级设置',
+          children: (
+            <>
+              {role === 'wan' && (
+                <Form.Item label="线路优先级 (metric)" name="metric" tooltip="多 WAN 时数值越小越优先">
+                  <InputNumber min={0} max={9999} style={{ width: 160 }} addonAfter={
+                    <Space size={4}>
+                      <a onClick={() => form.setFieldValue('metric', 0)}>主</a>
+                      <a onClick={() => form.setFieldValue('metric', 100)}>备</a>
+                    </Space>} />
+                </Form.Item>
+              )}
+              <Form.Item label="使用上游下发 DNS (peerdns)" name="peerdns" tooltip="留空=默认；关闭则只用手填 DNS">
+                <Select allowClear placeholder="默认" options={[{ value: true, label: '是' }, { value: false, label: '否' }]} style={{ width: 160 }} />
+              </Form.Item>
+              <Form.Item label="开机自启 (auto)" name="auto">
+                <Select allowClear placeholder="默认(是)" options={[{ value: true, label: '是' }, { value: false, label: '否' }]} style={{ width: 160 }} />
+              </Form.Item>
+              <Form.Item label="无链路也配置 (force_link)" name="force_link">
+                <Select allowClear placeholder="默认" options={[{ value: true, label: '是' }, { value: false, label: '否' }]} style={{ width: 160 }} />
+              </Form.Item>
+              <Form.Item label="广播地址" name="broadcast"><Input placeholder="192.168.1.255" /></Form.Item>
+              <Form.Item label="MTU" name="mtu"><InputNumber min={576} max={9200} style={{ width: 160 }} /></Form.Item>
+              <Form.Item label="克隆 MAC" name="clone_mac" tooltip="留空使用网卡原 MAC"><Input placeholder="AA:BB:CC:DD:EE:FF" /></Form.Item>
+              <Form.Item label="IPv6 委派前缀 (ip6assign)" name="ip6assign" tooltip="LAN 常用 60；0=不设"><InputNumber min={0} max={64} style={{ width: 160 }} /></Form.Item>
+              <Form.Item label="IPv6 子前缀提示 (ip6hint)" name="ip6hint"><Input placeholder="hex，如 10" /></Form.Item>
+              <Form.Item label="静态 IPv6 (ip6addr)" name="ip6addr"><Input placeholder="2001:db8::1/64" /></Form.Item>
+              <Form.Item label="IPv6 网关 (ip6gw)" name="ip6gw"><Input placeholder="2001:db8::1" /></Form.Item>
+              <Form.Item label="备注" name="remark"><Input /></Form.Item>
+            </>
+          ),
+        }]} />
         <Paragraph type="secondary" style={{ fontSize: 12 }}>
           <Tooltip title="保存即写入 /etc/config/network 并 reload，修改内网 IP / 绑定网卡可能短暂断网">
             提示：保存后会下发到 OpenWrt 并重载网络。

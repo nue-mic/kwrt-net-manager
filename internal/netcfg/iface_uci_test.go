@@ -296,6 +296,28 @@ func TestSaveMainLANSkipsZone(t *testing.T) {
 	}
 }
 
+func TestDeleteNetIfaceCleansUp(t *testing.T) {
+	net := "network.lan2=interface\nnetwork.lan2.proto='static'\nnetwork.lan2.device='br-lan2'\n" +
+		"network.dev_lan2=device\nnetwork.dev_lan2.type='bridge'\nnetwork.dev_lan2.name='br-lan2'\nnetwork.dev_lan2.managed_by='kwrt-net-manager'\nnetwork.dev_lan2.ports='eth3'\n"
+	fw := "firewall.lanzone=zone\nfirewall.lanzone.name='lan'\nfirewall.lanzone.network='lan' 'lan2'\n"
+	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": net, "firewall": fw}}
+	be := newTestUCI(t, f)
+	if err := be.DeleteNetIface("lan2"); err != nil {
+		t.Fatal(err)
+	}
+	netb := f.batchContaining("commit network")
+	if !strings.Contains(netb, "delete network.lan2") {
+		t.Errorf("should delete interface\n%s", netb)
+	}
+	if !strings.Contains(netb, "delete network.dev_lan2") {
+		t.Errorf("should delete managed device section\n%s", netb)
+	}
+	fwb := f.batchContaining("commit firewall")
+	if !strings.Contains(fwb, "del_list firewall.lanzone.network='lan2'") {
+		t.Errorf("should leave firewall zone\n%s", fwb)
+	}
+}
+
 func TestSaveNetIfaceLANBridge(t *testing.T) {
 	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": sampleNetIfaceShow}}
 	be := newTestUCI(t, f)

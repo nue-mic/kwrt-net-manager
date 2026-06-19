@@ -609,8 +609,14 @@ func (b *uciBackend) removeIfaceFromZones(id string) {
 
 func (b *uciBackend) DeleteNetIface(id string) error {
 	id = uciName(id)
+	_ = b.storeBackend.DeleteNetIface(id) // 同步旁车
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "delete network.%s\n", id)
+	// 删除本工具托管的 dev_<id> device 段（桥/克隆MAC 段），不碰 stock/手改段。
+	devSec := uciName("dev_" + id)
+	if b.isManagedSection("network", devSec) {
+		fmt.Fprintf(&sb, "delete network.%s\n", devSec)
+	}
 	sb.WriteString("commit network\n")
 	if out, err := b.run.Run(sb.String(), "uci", "batch"); err != nil {
 		return fmt.Errorf("delete interface: %v (%s)", err, strings.TrimSpace(out))
@@ -618,7 +624,22 @@ func (b *uciBackend) DeleteNetIface(id string) error {
 	if initdExists("network") {
 		_, _ = b.run.Run("", "/etc/init.d/network", "reload")
 	}
+	b.removeIfaceFromZones(id)
 	return nil
+}
+
+// isManagedSection 判断 config.section 是否带 managed_by=kwrt-net-manager 标记。
+func (b *uciBackend) isManagedSection(config, section string) bool {
+	show, err := b.uciShow(config)
+	if err != nil {
+		return false
+	}
+	for _, s := range parseUci(show, config) {
+		if s.name == section && first(s.opts[managedOpt]) == managedMarker {
+			return true
+		}
+	}
+	return false
 }
 
 func (b *uciBackend) WANAction(id, action string) error {

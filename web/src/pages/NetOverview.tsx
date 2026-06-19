@@ -20,6 +20,9 @@ const PREFIXES = [
   { v: 23, t: '/23' }, { v: 22, t: '/22' }, { v: 30, t: '/30' },
 ];
 
+// IPv6 附加地址常用前缀长度。
+const PREFIXES6 = [64, 56, 48, 60, 128];
+
 function maskToPrefix(mask: string): number {
   const m = mask.split('.').map(Number);
   if (m.length !== 4 || m.some((x) => isNaN(x))) return 24;
@@ -256,6 +259,8 @@ function IfaceDrawer({ open, role, editing, nics, onClose, onSaved, onAction, on
         broadcast: editing.broadcast || '', force_link: editing.force_link ?? undefined,
         auto: editing.auto ?? undefined, ip6assign: editing.ip6assign || 0,
         ip6hint: editing.ip6hint || '', ip6addr: editing.ip6addr || '', ip6gw: editing.ip6gw || '',
+        ip6prefix: editing.ip6prefix || '', ip6ifaceid: editing.ip6ifaceid || '',
+        keepalive: editing.keepalive || '', pppoe_ipv6: editing.pppoe_ipv6 ?? undefined,
       });
     } else {
       form.setFieldsValue({
@@ -292,7 +297,16 @@ function IfaceDrawer({ open, role, editing, nics, onClose, onSaved, onAction, on
     const ports: string[] = v.ports || [];
     const extra: net.IfaceAddr[] = (v.extra_addrs || [])
       .filter((a: any) => a && a.address)
-      .map((a: any) => ({ address: a.address, prefix: a.prefix || 24, family: 'ipv4' as const, remark: a.remark || '', enabled: true }));
+      .map((a: any) => {
+        const family: 'ipv4' | 'ipv6' = a.family === 'ipv6' ? 'ipv6' : 'ipv4';
+        return {
+          address: a.address,
+          prefix: a.prefix || (family === 'ipv6' ? 64 : 24),
+          family,
+          remark: a.remark || '',
+          enabled: true,
+        };
+      });
     const body: net.NetIfaceInput = {
       id: editing?.id || v.id || '',
       name: editing?.name || v.id || '',
@@ -323,6 +337,10 @@ function IfaceDrawer({ open, role, editing, nics, onClose, onSaved, onAction, on
       ip6hint: v.ip6hint || '',
       ip6addr: v.ip6addr || '',
       ip6gw: v.ip6gw || '',
+      ip6prefix: v.ip6prefix || '',
+      ip6ifaceid: v.ip6ifaceid || '',
+      keepalive: v.keepalive || '',
+      pppoe_ipv6: v.pppoe_ipv6,
     };
     setSaving(true);
     try {
@@ -429,6 +447,12 @@ function IfaceDrawer({ open, role, editing, nics, onClose, onSaved, onAction, on
             <Form.Item label="AC 名称" name="ac" tooltip="一般不填">
               <Input />
             </Form.Item>
+            <Form.Item label="保活间隔 (keepalive)" name="keepalive" tooltip='格式"失败次数 间隔秒"，如 "5 25"；留空用默认'>
+              <Input placeholder="5 25" style={{ width: 200 }} />
+            </Form.Item>
+            <Form.Item label="PPPoE 启用 IPv6" name="pppoe_ipv6" tooltip="在 PPPoE 链路上获取/分配 IPv6；留空=默认">
+              <Select allowClear placeholder="默认" options={[{ value: true, label: '是' }, { value: false, label: '否' }]} style={{ width: 160 }} />
+            </Form.Item>
           </>
         )}
 
@@ -443,16 +467,35 @@ function IfaceDrawer({ open, role, editing, nics, onClose, onSaved, onAction, on
                 options={PREFIXES.map((p) => ({ value: p.v, label: p.t }))} />
             </Form.Item>
             <Form.Item label="附加 IP" tooltip="同接口的次地址，可同/异子网，仅作管理/路由，不发 DHCP；需发地址请新建内网口">
+              <Text type="secondary" style={{ display: 'block', fontSize: 12, marginBottom: 8 }}>
+                支持 IPv4 / IPv6 附加地址（次地址），可同/异子网，仅作管理/路由，均不发 DHCP。
+              </Text>
               <Form.List name="extra_addrs">
                 {(fields, { add, remove }) => (
                   <Space direction="vertical" style={{ width: '100%' }} size={6}>
                     {fields.map(({ key, name, ...rest }) => (
                       <Space key={key} align="baseline" wrap>
-                        <Form.Item {...rest} name={[name, 'address']} noStyle rules={[{ required: true, message: 'IP' }]}>
-                          <Input placeholder="10.0.0.1" style={{ width: 150 }} />
+                        <Form.Item {...rest} name={[name, 'family']} noStyle initialValue="ipv4">
+                          <Select
+                            style={{ width: 84 }}
+                            options={[{ value: 'ipv4', label: 'IPv4' }, { value: 'ipv6', label: 'IPv6' }]}
+                          />
                         </Form.Item>
-                        <Form.Item {...rest} name={[name, 'prefix']} noStyle initialValue={24}>
-                          <Select style={{ width: 110 }} options={PREFIXES.map((p) => ({ value: p.v, label: '/' + p.v }))} />
+                        <Form.Item {...rest} name={[name, 'address']} noStyle rules={[{ required: true, message: 'IP' }]}>
+                          <Input placeholder="10.0.0.1" style={{ width: 170 }} />
+                        </Form.Item>
+                        <Form.Item noStyle shouldUpdate>
+                          {() => {
+                            const fam = form.getFieldValue(['extra_addrs', name, 'family']) || 'ipv4';
+                            const opts = fam === 'ipv6'
+                              ? PREFIXES6.map((p) => ({ value: p, label: '/' + p }))
+                              : PREFIXES.map((p) => ({ value: p.v, label: '/' + p.v }));
+                            return (
+                              <Form.Item {...rest} name={[name, 'prefix']} noStyle initialValue={24}>
+                                <Select style={{ width: 110 }} options={opts} />
+                              </Form.Item>
+                            );
+                          }}
                         </Form.Item>
                         <Form.Item {...rest} name={[name, 'remark']} noStyle>
                           <Input placeholder="备注" style={{ width: 120 }} />
@@ -460,7 +503,7 @@ function IfaceDrawer({ open, role, editing, nics, onClose, onSaved, onAction, on
                         <DeleteOutlined onClick={() => remove(name)} />
                       </Space>
                     ))}
-                    <Button type="dashed" onClick={() => add({ prefix: 24 })} icon={<PlusOutlined />} block>新增附加 IP</Button>
+                    <Button type="dashed" onClick={() => add({ family: 'ipv4', prefix: 24 })} icon={<PlusOutlined />} block>新增附加 IP</Button>
                   </Space>
                 )}
               </Form.List>
@@ -531,8 +574,10 @@ function IfaceDrawer({ open, role, editing, nics, onClose, onSaved, onAction, on
               <Form.Item label="克隆 MAC" name="clone_mac" tooltip="留空使用网卡原 MAC"><Input placeholder="AA:BB:CC:DD:EE:FF" /></Form.Item>
               <Form.Item label="IPv6 委派前缀 (ip6assign)" name="ip6assign" tooltip="LAN 常用 60；0=不设"><InputNumber min={0} max={64} style={{ width: 160 }} /></Form.Item>
               <Form.Item label="IPv6 子前缀提示 (ip6hint)" name="ip6hint"><Input placeholder="hex，如 10" /></Form.Item>
-              <Form.Item label="静态 IPv6 (ip6addr)" name="ip6addr"><Input placeholder="2001:db8::1/64" /></Form.Item>
+              <Form.Item label="静态 IPv6 (ip6addr)" name="ip6addr" tooltip="单条主 IPv6/CIDR；更多 IPv6 用上方「附加 IP」加 IPv6 行"><Input placeholder="2001:db8::1/64" /></Form.Item>
               <Form.Item label="IPv6 网关 (ip6gw)" name="ip6gw"><Input placeholder="2001:db8::1" /></Form.Item>
+              <Form.Item label="IPv6 委派前缀 (ip6prefix)" name="ip6prefix" tooltip="向下游分发的前缀 CIDR"><Input placeholder="2001:db8:1::/48" /></Form.Item>
+              <Form.Item label="IPv6 接口 ID (ip6ifaceid)" name="ip6ifaceid" tooltip="接口 ID 后缀"><Input placeholder="::1" /></Form.Item>
               <Form.Item label="备注" name="remark"><Input /></Form.Item>
             </>
           ),

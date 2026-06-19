@@ -64,6 +64,118 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/Interface" }
 
+  /api/v1/nics:
+    get:
+      tags: [netcfg]
+      summary: 物理网卡清单（网卡列表）
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/NIC" }
+
+  /api/v1/netcfg/overview:
+    get:
+      tags: [netcfg]
+      summary: 内外网设置总览（WAN/LAN 计数 + 列表）
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetOverview" }
+
+  /api/v1/ifaces:
+    get:
+      tags: [netcfg]
+      summary: 已配置的 LAN/WAN 接口列表
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/NetIface" }
+    post:
+      tags: [netcfg]
+      summary: 新增 LAN/WAN 接口
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NetIface" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetIface" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/v1/ifaces/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [netcfg]
+      summary: 取单个接口
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetIface" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [netcfg]
+      summary: 更新接口
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NetIface" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetIface" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [netcfg]
+      summary: 删除接口
+      responses:
+        "200": { description: OK }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/ifaces/{id}/action:
+    post:
+      tags: [netcfg]
+      summary: WAN 拨号动作（connect/disconnect/restart）
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [connect, disconnect, restart] }
+      responses:
+        "200": { description: OK }
+
   /api/v1/dhcp/servers:
     get:
       tags: [dhcp-server]
@@ -947,6 +1059,10 @@ components:
         ip6hint: { type: string }
         ip6addr: { type: string }
         ip6gw: { type: string }
+        ip6prefix: { type: string }
+        ip6ifaceid: { type: string }
+        keepalive: { type: string }
+        pppoe_ipv6: { type: boolean, nullable: true }
         up: { type: boolean, readOnly: true }
         runtime_ip: { type: string, readOnly: true }
     IfaceAddr:
@@ -957,3 +1073,38 @@ components:
         family: { type: string, enum: [ipv4, ipv6] }
         remark: { type: string }
         enabled: { type: boolean }
+    NIC:
+      type: object
+      properties:
+        name: { type: string }
+        mac: { type: string }
+        up: { type: boolean }
+        running: { type: boolean }
+        speed_mb: { type: integer }
+        duplex: { type: string }
+        mtu: { type: integer }
+        kind: { type: string, enum: [physical, bridge, vlan, wifi, virtual] }
+        bound: { type: string }
+        role: { type: string, enum: [lan, wan, ""] }
+        rx_bytes: { type: integer }
+        tx_bytes: { type: integer }
+        ip_addrs:
+          type: array
+          items: { type: string }
+    NetOverview:
+      type: object
+      properties:
+        wan_count: { type: integer }
+        wan_up: { type: integer }
+        connections: { type: integer }
+        lan_count: { type: integer }
+        lan_up: { type: integer }
+        dhcp_on: { type: integer }
+        terminals: { type: integer }
+        free_ports: { type: integer }
+        wans:
+          type: array
+          items: { $ref: "#/components/schemas/NetIface" }
+        lans:
+          type: array
+          items: { $ref: "#/components/schemas/NetIface" }

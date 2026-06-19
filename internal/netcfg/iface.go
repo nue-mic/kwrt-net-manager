@@ -79,7 +79,10 @@ func (s *Service) SaveNetIface(in NetIface) (NetIface, error) {
 func (s *Service) DeleteNetIface(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	existing, _ := s.be.NetIfaces()
+	existing, err := s.be.NetIfaces()
+	if err != nil {
+		return err
+	}
 	if err := canDeleteNetIface(id, existing); err != nil {
 		return err
 	}
@@ -304,7 +307,11 @@ func checkIfaceRelations(in NetIface, existing []NetIface, servers []DHCPServer)
 		}
 		for _, ip := range allIfaceIPs(x) {
 			if mine[ip] {
-				return errors.New("IP 地址 " + ip + " 已被接口 " + x.Name + " 占用")
+				name := x.Name
+				if name == "" {
+					name = x.ID
+				}
+				return errors.New("IP 地址 " + ip + " 已被接口 " + name + " 占用")
 			}
 		}
 	}

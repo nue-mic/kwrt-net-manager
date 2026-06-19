@@ -80,6 +80,21 @@ func TestCheckIfaceRelations(t *testing.T) {
 	}
 }
 
+func TestCheckIfaceRelationsSelfAndExtra(t *testing.T) {
+	existing := []NetIface{{ID: "lan", Name: "lan", Role: RoleLAN, IPAddr: "192.168.1.1", Netmask: "255.255.255.0"}}
+	// 更新自身不误报
+	self := NetIface{ID: "lan", Role: RoleLAN, IPAddr: "192.168.1.1", Netmask: "255.255.255.0"}
+	if err := checkIfaceRelations(self, existing, nil); err != nil {
+		t.Errorf("updating self should not flag duplicate: %v", err)
+	}
+	// 附加 IP 撞其它接口主 IP
+	clash := NetIface{ID: "lan2", Role: RoleLAN, IPAddr: "192.168.2.1", Netmask: "255.255.255.0",
+		ExtraAddrs: []IfaceAddr{{Address: "192.168.1.1", Prefix: 24, Family: "ipv4", Enabled: true}}}
+	if err := checkIfaceRelations(clash, existing, nil); err == nil {
+		t.Error("extra IP colliding with another iface's primary IP should be rejected")
+	}
+}
+
 func TestCanDeleteLastLAN(t *testing.T) {
 	one := []NetIface{{ID: "lan", Role: RoleLAN}}
 	if err := canDeleteNetIface("lan", one); err == nil {

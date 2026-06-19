@@ -327,6 +327,9 @@ func (b *uciBackend) ifaceStatus(id string) (ifStatus, bool) {
 
 func (b *uciBackend) SaveNetIface(in NetIface) error {
 	id := uciName(in.ID)
+	// 构造 batch 前（基于当前 UCI）记录接口原先承载的托管 device 段：拓扑/设备切换后
+	// 若它不再被新的 chosenDev 使用，需回收（否则旧桥/旧 clone_mac 段残留 → MAC 仍生效）。
+	oldDevSec := b.managedDeviceSectionOf(id)
 	// 旁车权威：先把整条 NetIface（含附加 IP 备注）存进内嵌 store，再投射 UCI。
 	_ = b.storeBackend.SaveNetIface(in)
 	var sb strings.Builder
@@ -413,6 +416,14 @@ func (b *uciBackend) SaveNetIface(in NetIface) error {
 	setOptOrDel(&sb, id, "remark", in.Remark)
 	writeIfaceExtraOpts(&sb, id, in)
 	b.ensureDeviceMAC(&sb, id, chosenDev, in.CloneMAC)
+	// 拓扑/设备切换回收：旧托管 device 段若不再对应新选中的 chosenDev，则删除，
+	// 避免孤儿桥段或旧 clone_mac 段残留（newSec 基于旧 UCI；新建的桥段尚不在其中）。
+	if oldDevSec != "" {
+		newSec := b.deviceSectionByName(chosenDev)
+		if oldDevSec != newSec {
+			fmt.Fprintf(&sb, "delete network.%s\n", oldDevSec)
+		}
+	}
 	sb.WriteString("commit network\n")
 
 	if out, err := b.run.Run(sb.String(), "uci", "batch"); err != nil {
@@ -509,6 +520,31 @@ func (b *uciBackend) isBridgeDevice(dev string) bool {
 		}
 	}
 	return false
+}
+
+// managedDeviceSectionOf 返回接口 id 的 device 选项当前指向的、且由本工具托管(managed_by)
+// 的 `config device` 段名；找不到返回 ""。用于删除/拓扑切换时精确回收，不靠 dev_<id> 猜名。
+func (b *uciBackend) managedDeviceSectionOf(id string) string {
+	show, err := b.uciShow("network")
+	if err != nil {
+		return ""
+	}
+	secs := parseUci(show, "network")
+	var dev string
+	for _, s := range secs {
+		if s.typ == "interface" && s.name == id {
+			dev = firstOf(s.opts["device"], s.opts["ifname"])
+		}
+	}
+	if dev == "" {
+		return ""
+	}
+	for _, s := range secs {
+		if s.typ == "device" && first(s.opts["name"]) == dev && first(s.opts[managedOpt]) == managedMarker {
+			return s.name
+		}
+	}
+	return ""
 }
 
 // deviceSectionByName returns the section name of the `config device` whose
@@ -687,12 +723,13 @@ func (b *uciBackend) removeIfaceFromZones(id string) {
 
 func (b *uciBackend) DeleteNetIface(id string) error {
 	id = uciName(id)
+	// 删段前（基于当前 UCI）按接口 device 选项指向的托管段精确定位，不靠 dev_<id> 猜名。
+	devSec := b.managedDeviceSectionOf(id)
 	_ = b.storeBackend.DeleteNetIface(id) // 同步旁车
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "delete network.%s\n", id)
-	// 删除本工具托管的 dev_<id> device 段（桥/克隆MAC 段），不碰 stock/手改段。
-	devSec := uciName("dev_" + id)
-	if b.isManagedSection("network", devSec) {
+	// 删除本工具托管的承载 device 段（桥/克隆MAC 段），不碰 stock/手改段。
+	if devSec != "" {
 		fmt.Fprintf(&sb, "delete network.%s\n", devSec)
 	}
 	sb.WriteString("commit network\n")
@@ -704,20 +741,6 @@ func (b *uciBackend) DeleteNetIface(id string) error {
 	}
 	b.removeIfaceFromZones(id)
 	return nil
-}
-
-// isManagedSection 判断 config.section 是否带 managed_by=kwrt-net-manager 标记。
-func (b *uciBackend) isManagedSection(config, section string) bool {
-	show, err := b.uciShow(config)
-	if err != nil {
-		return false
-	}
-	for _, s := range parseUci(show, config) {
-		if s.name == section && first(s.opts[managedOpt]) == managedMarker {
-			return true
-		}
-	}
-	return false
 }
 
 func (b *uciBackend) WANAction(id, action string) error {

@@ -297,8 +297,11 @@ func TestSaveMainLANSkipsZone(t *testing.T) {
 }
 
 func TestDeleteNetIfaceCleansUp(t *testing.T) {
+	// 真机：多网卡桥 lan2 的 device='br-lan2'，writeBridge 建的 device 段名是
+	// uciName("dev_br-lan2") = dev_br_lan2（不是 dev_lan2）。删除必须按接口当前
+	// device 选项指向的托管段精确回收，否则猜名 dev_lan2 漏删 → 孤儿桥段残留。
 	net := "network.lan2=interface\nnetwork.lan2.proto='static'\nnetwork.lan2.device='br-lan2'\n" +
-		"network.dev_lan2=device\nnetwork.dev_lan2.type='bridge'\nnetwork.dev_lan2.name='br-lan2'\nnetwork.dev_lan2.managed_by='kwrt-net-manager'\nnetwork.dev_lan2.ports='eth3'\n"
+		"network.dev_br_lan2=device\nnetwork.dev_br_lan2.type='bridge'\nnetwork.dev_br_lan2.name='br-lan2'\nnetwork.dev_br_lan2.managed_by='kwrt-net-manager'\nnetwork.dev_br_lan2.ports='eth3'\n"
 	fw := "firewall.lanzone=zone\nfirewall.lanzone.name='lan'\nfirewall.lanzone.network='lan' 'lan2'\n"
 	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": net, "firewall": fw}}
 	be := newTestUCI(t, f)
@@ -309,12 +312,58 @@ func TestDeleteNetIfaceCleansUp(t *testing.T) {
 	if !strings.Contains(netb, "delete network.lan2") {
 		t.Errorf("should delete interface\n%s", netb)
 	}
-	if !strings.Contains(netb, "delete network.dev_lan2") {
-		t.Errorf("should delete managed device section\n%s", netb)
+	if !strings.Contains(netb, "delete network.dev_br_lan2") {
+		t.Errorf("should delete managed device section dev_br_lan2 (真机段名)\n%s", netb)
 	}
 	fwb := f.batchContaining("commit firewall")
 	if !strings.Contains(fwb, "del_list firewall.lanzone.network='lan2'") {
 		t.Errorf("should leave firewall zone\n%s", fwb)
+	}
+}
+
+func TestSaveNetIfaceTopologySwitchCleansOldDevice(t *testing.T) {
+	// 危险场景：单网卡直连 lan（device=eth0）曾用 clone_mac 建了托管段
+	// dev_lan(name=eth0, macaddr)；用户改成多网卡桥接（Ports=eth1,eth2,Device=br-lan）。
+	// writeBridge 会另建 dev_br_lan，旧的 dev_lan 必须被回收，否则 eth0 上克隆 MAC
+	// 仍生效（ISP 绑 MAC 会断网）。
+	net := "network.lan=interface\nnetwork.lan.proto='static'\nnetwork.lan.device='eth0'\nnetwork.lan.ipaddr='192.168.1.1'\nnetwork.lan.netmask='255.255.255.0'\n" +
+		"network.dev_lan=device\nnetwork.dev_lan.name='eth0'\nnetwork.dev_lan.macaddr='AA:BB:CC:DD:EE:FF'\nnetwork.dev_lan.managed_by='kwrt-net-manager'\n"
+	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": net, "firewall": ""}}
+	be := newTestUCI(t, f)
+	if err := be.SaveNetIface(NetIface{
+		ID: "lan", Role: RoleLAN, Device: "br-lan",
+		IPAddr: "192.168.1.1", Netmask: "255.255.255.0",
+		Ports: []string{"eth1", "eth2"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	b := f.batchContaining("commit network")
+	if !strings.Contains(b, "delete network.dev_lan") {
+		t.Errorf("topology switch should reclaim old managed device dev_lan\n--- batch ---\n%s", b)
+	}
+	// 新桥段 dev_br_lan 必须被建出来（不能误删）
+	if !strings.Contains(b, "set network.dev_br_lan.name='br-lan'") {
+		t.Errorf("new bridge device dev_br_lan should be created\n--- batch ---\n%s", b)
+	}
+}
+
+func TestSaveNetIfaceSamePortNoDelete(t *testing.T) {
+	// 常见场景：单网卡 lan（device=eth0，托管 dev_lan 承载 clone_mac）仅改 IP，
+	// 仍 device=eth0 / Ports=[eth0]。device 段没换，绝不能误删 dev_lan。
+	net := "network.lan=interface\nnetwork.lan.proto='static'\nnetwork.lan.device='eth0'\nnetwork.lan.ipaddr='192.168.1.1'\nnetwork.lan.netmask='255.255.255.0'\n" +
+		"network.dev_lan=device\nnetwork.dev_lan.name='eth0'\nnetwork.dev_lan.macaddr='AA:BB:CC:DD:EE:FF'\nnetwork.dev_lan.managed_by='kwrt-net-manager'\n"
+	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": net, "firewall": ""}}
+	be := newTestUCI(t, f)
+	if err := be.SaveNetIface(NetIface{
+		ID: "lan", Role: RoleLAN, Device: "eth0",
+		IPAddr: "192.168.1.99", Netmask: "255.255.255.0", Ports: []string{"eth0"},
+		CloneMAC: "AA:BB:CC:DD:EE:FF",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	b := f.batchContaining("commit network")
+	if strings.Contains(b, "delete network.dev_lan\n") {
+		t.Errorf("same-device IP-only change must NOT delete dev_lan\n--- batch ---\n%s", b)
 	}
 }
 

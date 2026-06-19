@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Alert,
   App,
@@ -22,6 +23,17 @@ import { PlusOutlined, ThunderboltOutlined, ReloadOutlined } from '@ant-design/i
 import PageCard from '../components/PageCard';
 import { useNetData, extractErr } from '../hooks/useNetData';
 import * as net from '../api/netcfg';
+
+// 由接口 IP + 掩码推默认 DHCP 地址池起止。
+// /24（255.255.255.0）时把末段换成 .100~.200；其余掩码退化为留空（让用户自填，避免给出错误范围）。
+function defaultPool(ip: string, mask: string): { start: string; end: string } {
+  const parts = (ip || '').split('.');
+  if (parts.length === 4 && parts.every((p) => p !== '' && !isNaN(Number(p))) && mask === '255.255.255.0') {
+    const prefix = parts.slice(0, 3).join('.');
+    return { start: `${prefix}.100`, end: `${prefix}.200` };
+  }
+  return { start: '', end: '' };
+}
 
 // Drawer 表单内自定义 DHCP 选项的行结构（code 允许暂为空，保存时再过滤/转换）。
 interface CustomOptionRow {
@@ -62,6 +74,7 @@ export default function DhcpServersPage() {
   const [batching, setBatching] = useState(false);
   const [routePush, setRoutePush] = useState<net.RoutePushMode>('off');
   const [form] = Form.useForm<ServerFormValues>();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     let alive = true;
@@ -108,6 +121,32 @@ export default function DhcpServersPage() {
       alive = false;
     };
   }, [data]);
+
+  // 从「内外网设置」一键跳转过来时，URL 带 iface/ip/mask：自动打开新建抽屉并预填，
+  // 让用户在已填好接口/网关/掩码/默认池的基础上确认保存（不自动保存）。读完即清 query 防重复触发。
+  useEffect(() => {
+    const iface = searchParams.get('iface');
+    if (!iface) return;
+    const ip = searchParams.get('ip') || '';
+    const mask = searchParams.get('mask') || '';
+    const pool = defaultPool(ip, mask);
+    setEditing(null);
+    form.resetFields();
+    form.setFieldsValue({
+      force: true,
+      exclude_text: '',
+      lease_minutes: 120,
+      custom_options: [],
+      interface: iface,
+      netmask: mask,
+      gateway: ip,
+      ip_start: pool.start,
+      ip_end: pool.end,
+    });
+    setOpen(true);
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // 手动刷新：重新拉取服务端状态 + 列表 + 路由下发模式（页面不轮询，状态变更后点此即可）。
   const onRefresh = async () => {

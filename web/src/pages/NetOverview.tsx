@@ -516,7 +516,11 @@ function IfaceDrawer({ open, role, editing, nics, onClose, onSaved, onAction, on
             {editing && role === 'lan' && (
               <Form.Item>
                 <Button type="link" style={{ paddingLeft: 0 }} icon={<ThunderboltOutlined />}
-                  onClick={() => navigate('/dhcp/servers')}>
+                  onClick={() => navigate(
+                    '/dhcp/servers?iface=' + encodeURIComponent(editing.id) +
+                    '&ip=' + encodeURIComponent(editing.ipaddr || '') +
+                    '&mask=' + encodeURIComponent(editing.netmask || ''),
+                  )}>
                   为该内网启用 DHCP（去 DHCP 服务端配置）
                 </Button>
               </Form.Item>

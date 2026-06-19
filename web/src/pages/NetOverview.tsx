@@ -479,6 +479,7 @@ function IfaceDrawer({ open, role, editing, nics, onClose, onSaved, onAction, on
                           <Select
                             style={{ width: 84 }}
                             options={[{ value: 'ipv4', label: 'IPv4' }, { value: 'ipv6', label: 'IPv6' }]}
+                            onChange={(v) => form.setFieldValue(['extra_addrs', name, 'prefix'], v === 'ipv6' ? 64 : 24)}
                           />
                         </Form.Item>
                         <Form.Item {...rest} name={[name, 'address']} noStyle rules={[{ required: true, message: 'IP' }]}>

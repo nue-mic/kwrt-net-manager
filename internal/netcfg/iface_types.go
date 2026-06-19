@@ -71,8 +71,8 @@ type NetIface struct {
 	Auto      *bool  `json:"auto,omitempty"`       // option auto（开机自启，nil/true=默认）
 	IP6Assign int    `json:"ip6assign,omitempty"`  // option ip6assign（委派前缀长度，0=不设）
 	IP6Hint   string `json:"ip6hint,omitempty"`    // option ip6hint（hex 子前缀 ID）
-	IP6Addr   string `json:"ip6addr,omitempty"`    // option ip6addr（单条静态 IPv6/CIDR）
 	IP6Gw     string `json:"ip6gw,omitempty"`      // option ip6gw（IPv6 默认网关）
+	// 注：静态 IPv6 统一走 ExtraAddrs(family=ipv6)，投射为 list ip6addr（纯列表无主次）。
 
 	IP6Prefix  string `json:"ip6prefix,omitempty"`  // option ip6prefix（向下游分发的前缀 CIDR）
 	IP6IfaceID string `json:"ip6ifaceid,omitempty"` // option ip6ifaceid（接口 ID 后缀）

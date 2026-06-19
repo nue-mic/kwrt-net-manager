@@ -275,9 +275,7 @@ func validateNetIface(in *NetIface) error {
 	if in.IP6Assign < 0 || in.IP6Assign > 64 {
 		return errors.New("IPv6 委派前缀长度（ip6assign）应在 0-64")
 	}
-	if in.IP6Addr != "" && !netutil.IsIPv6(strings.SplitN(in.IP6Addr, "/", 2)[0]) {
-		return errors.New("IPv6 地址（ip6addr）不合法")
-	}
+	// 静态 IPv6 走 ExtraAddrs(family=ipv6)，其校验在上方附加 IP 循环统一处理。
 	if in.IP6Gw != "" && !netutil.IsIPv6(in.IP6Gw) {
 		return errors.New("IPv6 网关（ip6gw）不合法")
 	}

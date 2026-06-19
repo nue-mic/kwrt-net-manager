@@ -205,7 +205,10 @@ func TestSaveNetIfaceFullFields(t *testing.T) {
 		ID: "wan", Role: RoleWAN, Proto: ProtoStatic, Device: "eth0",
 		IPAddr: "1.1.1.2", Netmask: "255.255.255.0", Gateway: "1.1.1.1",
 		Metric: 10, PeerDNS: &peer, Auto: &auto, Broadcast: "1.1.1.255",
-		IP6Assign: 60, IP6Hint: "10", IP6Addr: "2001:db8::1/64", IP6Gw: "2001:db8::1",
+		IP6Assign: 60, IP6Hint: "10", IP6Gw: "2001:db8::1",
+		ExtraAddrs: []IfaceAddr{
+			{Address: "2001:db8::1", Prefix: 64, Family: "ipv6", Enabled: true},
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -218,7 +221,7 @@ func TestSaveNetIfaceFullFields(t *testing.T) {
 		"set network.wan.broadcast='1.1.1.255'",
 		"set network.wan.ip6assign='60'",
 		"set network.wan.ip6hint='10'",
-		"add_list network.wan.ip6addr='2001:db8::1/64'", // 主 IPv6 现以 list 形式投射
+		"add_list network.wan.ip6addr='2001:db8::1/64'", // 静态 IPv6 走 ExtraAddrs → list 投射
 		"set network.wan.ip6gw='2001:db8::1'",
 	} {
 		if !strings.Contains(b, w) {
@@ -426,7 +429,6 @@ func TestSaveNetIfaceMultiIPv6(t *testing.T) {
 	err := be.SaveNetIface(NetIface{
 		ID: "lan", Role: RoleLAN, Device: "eth0", Ports: []string{"eth0"},
 		IPAddr: "192.168.1.1", Netmask: "255.255.255.0",
-		IP6Addr: "2001:db8::1/64",
 		ExtraAddrs: []IfaceAddr{
 			{Address: "10.0.0.1", Prefix: 24, Family: "ipv4", Enabled: true},
 			{Address: "fd00::1", Prefix: 64, Family: "ipv6", Enabled: true},
@@ -439,7 +441,6 @@ func TestSaveNetIfaceMultiIPv6(t *testing.T) {
 	b := f.batchContaining("commit network")
 	for _, w := range []string{
 		"delete network.lan.ip6addr",
-		"add_list network.lan.ip6addr='2001:db8::1/64'",
 		"add_list network.lan.ip6addr='fd00::1/64'",
 		"add_list network.lan.ip6addr='fd11::1/64'",
 		"add_list network.lan.ipaddr='192.168.1.1/24'",
@@ -449,7 +450,7 @@ func TestSaveNetIfaceMultiIPv6(t *testing.T) {
 			t.Errorf("ipv6 batch missing %q\n%s", w, b)
 		}
 	}
-	// 不得再写 option ip6addr
+	// 静态 IPv6 全部来自 ExtraAddrs：不得再写 option ip6addr
 	if strings.Contains(b, "set network.lan.ip6addr=") {
 		t.Errorf("must not write option ip6addr with list\n%s", b)
 	}
@@ -464,23 +465,67 @@ func TestNetIfacesReadsMultiIPv6(t *testing.T) {
 	be := newTestUCI(t, f)
 	ifaces, _ := be.NetIfaces()
 	lan := ifaces[0]
-	if lan.IP6Addr != "2001:db8::1/64" {
-		t.Errorf("primary v6 = %q", lan.IP6Addr)
-	}
-	v6 := 0
+	// list ip6addr 是纯列表、无主次：两条都回到 ExtraAddrs(ipv6)，不再有"主 IPv6"。
+	var v6 []IfaceAddr
 	for _, a := range lan.ExtraAddrs {
 		if a.Family == FamilyIPv6 {
-			v6++
-			if a.Address != "fd00::1" || a.Prefix != 64 {
-				t.Errorf("v6 extra=%+v", a)
-			}
+			v6 = append(v6, a)
 		}
 	}
-	if v6 != 1 {
-		t.Errorf("want 1 ipv6 extra, got %d (%+v)", v6, lan.ExtraAddrs)
+	if len(v6) != 2 {
+		t.Fatalf("want 2 ipv6 extra, got %d (%+v)", len(v6), lan.ExtraAddrs)
+	}
+	if v6[0].Address != "2001:db8::1" || v6[0].Prefix != 64 {
+		t.Errorf("v6[0]=%+v", v6[0])
+	}
+	if v6[1].Address != "fd00::1" || v6[1].Prefix != 64 {
+		t.Errorf("v6[1]=%+v", v6[1])
 	}
 	if lan.IP6Prefix != "2001:db80:1::/48" || lan.IP6IfaceID != "::1" {
 		t.Errorf("ip6prefix=%q ip6ifaceid=%q", lan.IP6Prefix, lan.IP6IfaceID)
+	}
+}
+
+// TestNetIfaceIPv6RoundTripSymmetric 锁定对称往返：2 条 list ip6addr 读回为 2 条
+// ExtraAddrs(ipv6)，再写回 SaveNetIface 应产出与原样一致的 2 条 add_list ip6addr，
+// 且无 set option ip6addr——证明 Model B 下静态 IPv6 读写完全闭环、不会"跳字段"。
+func TestNetIfaceIPv6RoundTripSymmetric(t *testing.T) {
+	show := "network.lan=interface\nnetwork.lan.proto='static'\nnetwork.lan.device='eth0'\n" +
+		"network.lan.ipaddr='192.168.1.1/24'\n" +
+		"network.lan.ip6addr='2001:db8::1/64' 'fd00::1/64'\n"
+	f := &fakeRunner{show: map[string]string{"dhcp": "", "network": show, "firewall": ""}}
+	be := newTestUCI(t, f)
+	ifaces, err := be.NetIfaces()
+	if err != nil {
+		t.Fatal(err)
+	}
+	lan := ifaces[0]
+	// 读路径：2 条 list ip6addr → 2 条 ExtraAddrs(ipv6)
+	var v6 []IfaceAddr
+	for _, a := range lan.ExtraAddrs {
+		if a.Family == FamilyIPv6 {
+			v6 = append(v6, a)
+		}
+	}
+	if len(v6) != 2 {
+		t.Fatalf("read should yield 2 ipv6 extra addrs, got %d (%+v)", len(v6), lan.ExtraAddrs)
+	}
+	// 写路径：把读回的 NetIface 原样存回，应对称还原 2 条 list ip6addr
+	if err := be.SaveNetIface(lan); err != nil {
+		t.Fatal(err)
+	}
+	b := f.batchContaining("commit network")
+	for _, w := range []string{
+		"delete network.lan.ip6addr",
+		"add_list network.lan.ip6addr='2001:db8::1/64'",
+		"add_list network.lan.ip6addr='fd00::1/64'",
+	} {
+		if !strings.Contains(b, w) {
+			t.Errorf("round-trip batch missing %q\n%s", w, b)
+		}
+	}
+	if strings.Contains(b, "set network.lan.ip6addr=") {
+		t.Errorf("round-trip must not write option ip6addr\n%s", b)
 	}
 }
 

@@ -263,13 +263,9 @@ func (b *uciBackend) NetIfaces() ([]NetIface, error) {
 				}
 			}
 		}
-		// IPv6 addressing: list ip6addr（option+list 统一切片），第一条为主(保留 CIDR 原样)，
-		// 其余追加为 ipv6 附加地址（按 '/' 拆 Address/Prefix；无 '/' 时 Prefix=128）。
-		for idx, raw := range s.opts["ip6addr"] {
-			if idx == 0 {
-				ni.IP6Addr = raw
-				continue
-			}
+		// IPv6 addressing: list ip6addr（option+list 统一切片）是纯列表、无主次，
+		// 全部读进 ExtraAddrs(family=ipv6)（按 '/' 拆 Address/Prefix；无 '/' 时 Prefix=128）。
+		for _, raw := range s.opts["ip6addr"] {
 			a, prefix := raw, 128
 			if j := strings.IndexByte(raw, '/'); j >= 0 {
 				a = raw[:j]
@@ -829,14 +825,11 @@ func writeAddrList(sb *strings.Builder, id string, in NetIface) {
 	}
 }
 
-// writeAddr6List 把主 IPv6(IP6Addr) + 启用的 ipv6 附加地址统一投射为 list ip6addr。
-// 有任何 ipv6 地址时先 delete 清掉 option/list 旧形式，再逐条 add_list（主 IPv6 第一条）。
-// 没有任何 ipv6 地址时只发 delete（清理，幂等）。
+// writeAddr6List 把启用的 ipv6 附加地址(ExtraAddrs family=ipv6)统一投射为 list ip6addr。
+// list ip6addr 本是纯列表、无主次，故静态 IPv6 全部来自 ExtraAddrs（不再有独立主 IPv6）。
+// 先 delete 清掉 option/list 旧形式（幂等），再逐条 add_list；无 ipv6 时仅 delete（清理）。
 func writeAddr6List(sb *strings.Builder, id string, in NetIface) {
 	var v6 []string
-	if strings.TrimSpace(in.IP6Addr) != "" {
-		v6 = append(v6, in.IP6Addr) // 已是 CIDR
-	}
 	for _, a := range in.ExtraAddrs {
 		if a.Family == FamilyIPv6 && a.Enabled && a.Address != "" {
 			v6 = append(v6, fmt.Sprintf("%s/%d", a.Address, a.Prefix))

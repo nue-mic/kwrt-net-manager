@@ -1057,7 +1057,6 @@ components:
         auto: { type: boolean, nullable: true }
         ip6assign: { type: integer }
         ip6hint: { type: string }
-        ip6addr: { type: string }
         ip6gw: { type: string }
         ip6prefix: { type: string }
         ip6ifaceid: { type: string }

@@ -258,7 +258,7 @@ function IfaceDrawer({ open, role, editing, nics, onClose, onSaved, onAction, on
         metric: editing.metric || 0, peerdns: editing.peerdns ?? undefined,
         broadcast: editing.broadcast || '', force_link: editing.force_link ?? undefined,
         auto: editing.auto ?? undefined, ip6assign: editing.ip6assign || 0,
-        ip6hint: editing.ip6hint || '', ip6addr: editing.ip6addr || '', ip6gw: editing.ip6gw || '',
+        ip6hint: editing.ip6hint || '', ip6gw: editing.ip6gw || '',
         ip6prefix: editing.ip6prefix || '', ip6ifaceid: editing.ip6ifaceid || '',
         keepalive: editing.keepalive || '', pppoe_ipv6: editing.pppoe_ipv6 ?? undefined,
       });
@@ -335,7 +335,6 @@ function IfaceDrawer({ open, role, editing, nics, onClose, onSaved, onAction, on
       auto: v.auto,
       ip6assign: v.ip6assign || 0,
       ip6hint: v.ip6hint || '',
-      ip6addr: v.ip6addr || '',
       ip6gw: v.ip6gw || '',
       ip6prefix: v.ip6prefix || '',
       ip6ifaceid: v.ip6ifaceid || '',
@@ -579,7 +578,6 @@ function IfaceDrawer({ open, role, editing, nics, onClose, onSaved, onAction, on
               <Form.Item label="克隆 MAC" name="clone_mac" tooltip="留空使用网卡原 MAC"><Input placeholder="AA:BB:CC:DD:EE:FF" /></Form.Item>
               <Form.Item label="IPv6 委派前缀 (ip6assign)" name="ip6assign" tooltip="LAN 常用 60；0=不设"><InputNumber min={0} max={64} style={{ width: 160 }} /></Form.Item>
               <Form.Item label="IPv6 子前缀提示 (ip6hint)" name="ip6hint"><Input placeholder="hex，如 10" /></Form.Item>
-              <Form.Item label="静态 IPv6 (ip6addr)" name="ip6addr" tooltip="单条主 IPv6/CIDR；更多 IPv6 用上方「附加 IP」加 IPv6 行"><Input placeholder="2001:db8::1/64" /></Form.Item>
               <Form.Item label="IPv6 网关 (ip6gw)" name="ip6gw"><Input placeholder="2001:db8::1" /></Form.Item>
               <Form.Item label="IPv6 委派前缀 (ip6prefix)" name="ip6prefix" tooltip="向下游分发的前缀 CIDR"><Input placeholder="2001:db8:1::/48" /></Form.Item>
               <Form.Item label="IPv6 接口 ID (ip6ifaceid)" name="ip6ifaceid" tooltip="接口 ID 后缀"><Input placeholder="::1" /></Form.Item>

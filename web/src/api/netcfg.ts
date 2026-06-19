@@ -323,7 +323,6 @@ export interface NetIface {
   auto?: boolean | null;
   ip6assign?: number;
   ip6hint?: string;
-  ip6addr?: string;
   ip6gw?: string;
   ip6prefix?: string;
   ip6ifaceid?: string;

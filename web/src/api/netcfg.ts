@@ -325,6 +325,10 @@ export interface NetIface {
   ip6hint?: string;
   ip6addr?: string;
   ip6gw?: string;
+  ip6prefix?: string;
+  ip6ifaceid?: string;
+  keepalive?: string;
+  pppoe_ipv6?: boolean | null;
   up: boolean;        // 只读运行态
   runtime_ip: string; // 只读运行 IP
 }

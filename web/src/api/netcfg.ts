@@ -287,6 +287,14 @@ export interface NIC {
   ip_addrs: string[] | null; // 该网卡全部地址（IPv4+IPv6，CIDR）
 }
 
+export interface IfaceAddr {
+  address: string;
+  prefix: number;
+  family: 'ipv4' | 'ipv6';
+  remark: string;
+  enabled: boolean;
+}
+
 export interface NetIface {
   id: string;
   name: string;
@@ -307,6 +315,16 @@ export interface NetIface {
   default_gw: boolean;
   clone_mac: string;
   remark: string;
+  extra_addrs: IfaceAddr[];
+  metric?: number;
+  peerdns?: boolean | null;
+  broadcast?: string;
+  force_link?: boolean | null;
+  auto?: boolean | null;
+  ip6assign?: number;
+  ip6hint?: string;
+  ip6addr?: string;
+  ip6gw?: string;
   up: boolean;        // 只读运行态
   runtime_ip: string; // 只读运行 IP
 }

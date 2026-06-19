@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Alert, App, Button, Card, Checkbox, Col, Collapse, Drawer, Form, Input, InputNumber,
   Modal, Popconfirm, Radio, Row, Select, Space, Statistic, Switch, Tag, Tooltip, Typography,
@@ -232,6 +233,7 @@ interface DrawerProps {
 
 function IfaceDrawer({ open, role, editing, nics, onClose, onSaved, onAction, onDelete }: DrawerProps) {
   const { message } = App.useApp();
+  const navigate = useNavigate();
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
   const proto = Form.useWatch('proto', form) as string | undefined;
@@ -471,7 +473,7 @@ function IfaceDrawer({ open, role, editing, nics, onClose, onSaved, onAction, on
             {editing && role === 'lan' && (
               <Form.Item>
                 <Button type="link" style={{ paddingLeft: 0 }} icon={<ThunderboltOutlined />}
-                  onClick={() => { window.location.hash = `#/dhcp?iface=${editing.id}`; }}>
+                  onClick={() => navigate('/dhcp/servers')}>
                   为该内网启用 DHCP（去 DHCP 服务端配置）
                 </Button>
               </Form.Item>

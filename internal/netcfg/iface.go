@@ -221,5 +221,49 @@ func validateNetIface(in *NetIface) error {
 	if in.DNSSecondary != "" && !netutil.IsIPv4(in.DNSSecondary) {
 		return errors.New("备选 DNS 不合法")
 	}
+	// 附加 IP + 去重（与主 IP、彼此）
+	seen := map[string]bool{}
+	if in.IPAddr != "" {
+		seen[in.IPAddr] = true
+	}
+	for i := range in.ExtraAddrs {
+		a := &in.ExtraAddrs[i]
+		if a.Family == "" {
+			a.Family = FamilyIPv4
+		}
+		if a.Family != FamilyIPv4 {
+			return errors.New("附加 IP 本期仅支持 IPv4")
+		}
+		if !netutil.IsIPv4(a.Address) {
+			return errors.New("附加 IP 地址不合法：" + a.Address)
+		}
+		if a.Prefix < 1 || a.Prefix > 32 {
+			return errors.New("附加 IP 掩码位必须在 1-32：" + a.Address)
+		}
+		if seen[a.Address] {
+			return errors.New("附加 IP 与已有地址重复：" + a.Address)
+		}
+		seen[a.Address] = true
+	}
+	// clone_mac 格式
+	if strings.TrimSpace(in.CloneMAC) != "" && !netutil.IsMAC(in.CloneMAC) {
+		return errors.New("克隆 MAC 格式不合法")
+	}
+	// 全量字段轻校验
+	if in.Metric < 0 {
+		return errors.New("线路优先级（metric）不能为负")
+	}
+	if in.IP6Assign < 0 || in.IP6Assign > 64 {
+		return errors.New("IPv6 委派前缀长度（ip6assign）应在 0-64")
+	}
+	if in.IP6Addr != "" && !netutil.IsIPv6(strings.SplitN(in.IP6Addr, "/", 2)[0]) {
+		return errors.New("IPv6 地址（ip6addr）不合法")
+	}
+	if in.IP6Gw != "" && !netutil.IsIPv6(in.IP6Gw) {
+		return errors.New("IPv6 网关（ip6gw）不合法")
+	}
+	if in.Broadcast != "" && !netutil.IsIPv4(in.Broadcast) {
+		return errors.New("广播地址不合法")
+	}
 	return nil
 }

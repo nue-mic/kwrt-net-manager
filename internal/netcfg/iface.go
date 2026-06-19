@@ -59,9 +59,14 @@ func (s *Service) SaveNetIface(in NetIface) (NetIface, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	existing, _ := s.be.NetIfaces()
 	if in.ID == "" {
 		in.ID = s.nextIfaceID(in.Role)
 		in.Name = in.ID
+	}
+	servers, _ := s.be.DHCPServers()
+	if err := checkIfaceRelations(in, existing, servers); err != nil {
+		return NetIface{}, err
 	}
 	if err := s.be.SaveNetIface(in); err != nil {
 		return NetIface{}, err
@@ -74,6 +79,10 @@ func (s *Service) SaveNetIface(in NetIface) (NetIface, error) {
 func (s *Service) DeleteNetIface(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	existing, _ := s.be.NetIfaces()
+	if err := canDeleteNetIface(id, existing); err != nil {
+		return err
+	}
 	if err := s.be.DeleteNetIface(id); err != nil {
 		return err
 	}
@@ -264,6 +273,69 @@ func validateNetIface(in *NetIface) error {
 	}
 	if in.Broadcast != "" && !netutil.IsIPv4(in.Broadcast) {
 		return errors.New("广播地址不合法")
+	}
+	return nil
+}
+
+// allIfaceIPs 收集一个接口的全部 IPv4（主 + 附加）。
+func allIfaceIPs(in NetIface) []string {
+	var out []string
+	if in.IPAddr != "" {
+		out = append(out, in.IPAddr)
+	}
+	for _, a := range in.ExtraAddrs {
+		if a.Address != "" {
+			out = append(out, a.Address)
+		}
+	}
+	return out
+}
+
+// checkIfaceRelations 做需要全局视图的关系校验：跨接口 IP 冲突（G4）、
+// 改子网导致绑定的 DHCP 池越界（G8）。in 为待保存项，existing 为现有接口列表。
+func checkIfaceRelations(in NetIface, existing []NetIface, servers []DHCPServer) error {
+	mine := map[string]bool{}
+	for _, ip := range allIfaceIPs(in) {
+		mine[ip] = true
+	}
+	for _, x := range existing {
+		if x.ID == in.ID {
+			continue // 同一接口（更新）跳过自身
+		}
+		for _, ip := range allIfaceIPs(x) {
+			if mine[ip] {
+				return errors.New("IP 地址 " + ip + " 已被接口 " + x.Name + " 占用")
+			}
+		}
+	}
+	// G8：本接口若改了主 IP/子网，检查绑定它的 DHCP 池是否仍在子网内
+	if in.IPAddr != "" && in.Netmask != "" {
+		for _, s := range servers {
+			if s.Interface != in.ID {
+				continue
+			}
+			if s.IPStart != "" && !netutil.SameSubnet(s.IPStart, in.IPAddr, in.Netmask) ||
+				s.IPEnd != "" && !netutil.SameSubnet(s.IPEnd, in.IPAddr, in.Netmask) {
+				return errors.New("该内网已有 DHCP 地址池（" + s.IPStart + "-" + s.IPEnd + "）不在新子网内，请先到「DHCP 服务端」调整后再改子网")
+			}
+		}
+	}
+	return nil
+}
+
+// canDeleteNetIface 实现 G2：不允许删除最后一个内网（否则失去管理入口）。
+func canDeleteNetIface(id string, existing []NetIface) error {
+	lanCount, isLAN := 0, false
+	for _, x := range existing {
+		if x.Role == RoleLAN {
+			lanCount++
+			if x.ID == id {
+				isLAN = true
+			}
+		}
+	}
+	if isLAN && lanCount <= 1 {
+		return errors.New("至少保留一个内网（LAN），否则将失去管理入口")
 	}
 	return nil
 }

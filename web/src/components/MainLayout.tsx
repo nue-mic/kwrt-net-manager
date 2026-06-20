@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Layout, Menu, Button, Space, Typography, Modal, App } from 'antd';
+import { Layout, Menu, Button, Space, Typography, Modal, App, Badge } from 'antd';
 import {
   DashboardOutlined,
   ApartmentOutlined,
@@ -21,6 +21,7 @@ import {
 import type { MenuProps } from 'antd';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import client, { getAPIToken, clearAPIToken } from '../api/client';
+import { checkVersion } from '../api/update';
 import ThemeSwitcher from '../theme/ThemeSwitcher';
 import { useBranding } from '../branding/BrandingContext';
 
@@ -97,6 +98,29 @@ const MainLayout: React.FC = () => {
   const { message } = App.useApp();
   const { branding } = useBranding();
   const metrics = useSysMetrics();
+
+  // 版本与更新检查：挂载时查一次，之后每 6 小时复查（后端有 ~1h 缓存，不会频繁打 GitHub）。
+  const [ver, setVer] = useState<{ current: string; hasUpdate: boolean; latest?: string }>({
+    current: '',
+    hasUpdate: false,
+  });
+  useEffect(() => {
+    let alive = true;
+    const run = async () => {
+      try {
+        const r = await checkVersion();
+        if (alive) setVer({ current: r.current, hasUpdate: r.has_update, latest: r.latest });
+      } catch {
+        /* 静默：检查失败不影响使用 */
+      }
+    };
+    void run();
+    const id = setInterval(run, 6 * 60 * 60 * 1000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
 
   useEffect(() => {
     if (!getAPIToken()) navigate('/login');
@@ -231,11 +255,22 @@ const MainLayout: React.FC = () => {
         children: [
           { key: '/backup', icon: <CloudUploadOutlined />, label: '定时备份' },
           { key: '/settings', icon: <SettingOutlined />, label: '系统设置' },
-          { key: '/about', icon: <InfoCircleOutlined />, label: '关于我们' },
+          {
+            key: '/about',
+            icon: <InfoCircleOutlined />,
+            // 有更新时菜单项上挂一个红点，提示去「关于我们」查看/升级。
+            label: ver.hasUpdate ? (
+              <Badge dot offset={[8, 0]} color="red">
+                关于我们
+              </Badge>
+            ) : (
+              '关于我们'
+            ),
+          },
         ],
       },
     ],
-    []
+    [ver.hasUpdate]
   );
 
   const selectedKey = useMemo(() => location.pathname, [location.pathname]);
@@ -259,31 +294,60 @@ const MainLayout: React.FC = () => {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sider width={216} theme="dark" breakpoint="lg" collapsedWidth={0} style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'auto' }}>
-        <div
-          style={{
-            height: 52,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            padding: '0 16px',
-            background: 'rgba(0,0,0,0.2)',
-          }}
-        >
-          <WifiOutlined style={{ fontSize: 20, color: '#4fc3f7' }} />
-          <Text strong style={{ color: '#fff', fontSize: 14, letterSpacing: 0.5, whiteSpace: 'nowrap' }}>
-            {branding.app_name}
-          </Text>
+      <Sider width={216} theme="dark" breakpoint="lg" collapsedWidth={0} style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <div
+            style={{
+              height: 52,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '0 16px',
+              background: 'rgba(0,0,0,0.2)',
+              flexShrink: 0,
+            }}
+          >
+            <WifiOutlined style={{ fontSize: 20, color: '#4fc3f7' }} />
+            <Text strong style={{ color: '#fff', fontSize: 14, letterSpacing: 0.5, whiteSpace: 'nowrap' }}>
+              {branding.app_name}
+            </Text>
+          </div>
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+            <Menu
+              theme="dark"
+              mode="inline"
+              selectedKeys={[selectedKey]}
+              defaultOpenKeys={openKeys}
+              onClick={({ key }) => navigate(key)}
+              items={menuItems}
+              style={{ borderInlineEnd: 'none', marginTop: 4 }}
+            />
+          </div>
+          {/* 底部版本条：始终显示当前版本；有更新时红点 + 「有新版」，点击进「关于我们」。 */}
+          <div
+            onClick={() => navigate('/about')}
+            title={ver.hasUpdate ? `有新版本 ${ver.latest ?? ''}，点击查看并升级` : '点击查看版本与更新'}
+            style={{
+              padding: '9px 16px',
+              borderTop: '1px solid rgba(255,255,255,0.08)',
+              background: 'rgba(0,0,0,0.18)',
+              cursor: 'pointer',
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <Badge dot={ver.hasUpdate} color="red" offset={[2, 2]}>
+              <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, whiteSpace: 'nowrap' }}>
+                版本 v{ver.current || '—'}
+              </Text>
+            </Badge>
+            {ver.hasUpdate && (
+              <Text style={{ color: '#ff7875', fontSize: 12, whiteSpace: 'nowrap' }}>有新版 {ver.latest}</Text>
+            )}
+          </div>
         </div>
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[selectedKey]}
-          defaultOpenKeys={openKeys}
-          onClick={({ key }) => navigate(key)}
-          items={menuItems}
-          style={{ borderInlineEnd: 'none', marginTop: 4 }}
-        />
       </Sider>
 
       <Layout>

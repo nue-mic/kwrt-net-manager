@@ -112,6 +112,7 @@ type Route struct {
 	// "unreachable"=不可达(回 ICMP)；"prohibit"=禁止(回 ICMP)。后三者无下一跳，不需网关。
 	Type    string `json:"type"`
 	MTU     int    `json:"mtu"`     // 路由 MTU（0=不设）
+	Table   int    `json:"table"`   // 路由表号（0=主表 main；配合策略路由把流量导向自定义表）
 	Remark  string `json:"remark"`  // 备注
 	Enabled bool   `json:"enabled"` // 状态
 	// PushToClients：把本路由经 DHCP option 121/249 下发给客户端，让"网关指向主路由"的
@@ -132,6 +133,22 @@ const (
 	RoutePushAll    = "all"    // 给池内全部客户端下发（pool 级 option 121/249）
 	RoutePushTagged = "tagged" // 仅给 RoutePush 的静态分配设备下发（host tag 级）
 )
+
+// PolicyRule is a policy-routing rule (ip rule). Maps to an OpenWrt
+// `config rule` / `config rule6` section: 把匹配的流量导向指定路由表，实现
+// 「按源地址/入接口分流到某条线路」（多线路/科学上网分流的原生做法）。
+type PolicyRule struct {
+	ID       string `json:"id"`
+	Family   string `json:"family"`   // "ipv4" | "ipv6"
+	Enabled  bool   `json:"enabled"`  // 状态
+	Priority int    `json:"priority"` // ip rule 优先级（越小越先匹配；0=不设由内核分配）
+	Src      string `json:"src"`      // 源地址/网段（可空），如 192.168.1.0/24
+	Dest     string `json:"dest"`     // 目标地址/网段（可空）
+	InIface  string `json:"in_iface"` // 入接口（可空）
+	Lookup   string `json:"lookup"`   // 查询的路由表号（必填，配合带 table 的静态路由）
+	Remark   string `json:"remark"`
+	Managed  bool   `json:"managed,omitempty"`
+}
 
 // RouteEntry is one row of the live kernel routing table (iKuai 当前路由表).
 type RouteEntry struct {
@@ -168,6 +185,7 @@ type State struct {
 	ARPBind     bool          `json:"arp_bind"`
 	ACL         ACL           `json:"acl"`
 	Routes      []Route       `json:"routes"`
+	PolicyRules []PolicyRule  `json:"policy_rules,omitempty"`
 	// RoutePushMode 控制把已标记 PushToClients 的静态路由经 DHCP 下发给客户端：
 	// "off"（默认）不下发；"all" 给所在池的全部客户端下发；"tagged" 仅给静态分配中
 	// RoutePush=true 的设备下发。空串视为 "off"。
@@ -201,6 +219,7 @@ func CloneState(s State) State {
 	}
 	out.Statics = append([]StaticLease(nil), s.Statics...)
 	out.Routes = append([]Route(nil), s.Routes...)
+	out.PolicyRules = append([]PolicyRule(nil), s.PolicyRules...)
 	out.ACL = ACL{Mode: s.ACL.Mode, Entries: append([]ACLEntry(nil), s.ACL.Entries...)}
 	out.NetIfaces = append([]NetIface(nil), s.NetIfaces...)
 	for i := range out.NetIfaces {

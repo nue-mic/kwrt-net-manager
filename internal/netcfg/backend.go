@@ -45,6 +45,10 @@ type Backend interface {
 	Routes() ([]Route, error)
 	SaveRoutes([]Route) error
 
+	// Policy routing rules (ip rule / config rule).
+	PolicyRules() ([]PolicyRule, error)
+	SavePolicyRules([]PolicyRule) error
+
 	// Global "push static routes to DHCP clients" mode: "off" | "all" | "tagged".
 	RoutePushMode() (string, error)
 	SaveRoutePushMode(mode string) error

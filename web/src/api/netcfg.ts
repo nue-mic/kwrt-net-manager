@@ -81,10 +81,24 @@ export interface Route {
   metric: number;
   type: RouteType; // 正常/黑洞/拒绝/不可达
   mtu: number; // 0=不设
+  table: number; // 路由表号（0=主表）
   remark: string;
   enabled: boolean;
   push_to_clients: boolean;
 }
+
+export interface PolicyRule {
+  id: string;
+  family: 'ipv4' | 'ipv6';
+  enabled: boolean;
+  priority: number;
+  src: string;
+  dest: string;
+  in_iface: string;
+  lookup: string; // 查询的路由表号
+  remark: string;
+}
+export type PolicyRuleInput = Omit<PolicyRule, 'id'>;
 
 export interface RouteEntry {
   interface: string;
@@ -276,6 +290,28 @@ export async function duplicateRoute(id: string): Promise<Route> {
 }
 export async function batchRoutes(action: BatchAction, ids: string[]): Promise<void> {
   await client.post('/api/v1/routes/batch', { action, ids });
+}
+// ---- 策略路由 ----
+export async function listPolicyRules(): Promise<PolicyRule[]> {
+  const { data } = await client.get('/api/v1/policy-rules');
+  return data.items ?? [];
+}
+export async function createPolicyRule(body: PolicyRuleInput): Promise<PolicyRule> {
+  const { data } = await client.post('/api/v1/policy-rules', body);
+  return data;
+}
+export async function updatePolicyRule(id: string, body: PolicyRuleInput): Promise<PolicyRule> {
+  const { data } = await client.put(`/api/v1/policy-rules/${id}`, body);
+  return data;
+}
+export async function deletePolicyRule(id: string): Promise<void> {
+  await client.delete(`/api/v1/policy-rules/${id}`);
+}
+export async function togglePolicyRule(id: string, enabled: boolean): Promise<void> {
+  await client.post(`/api/v1/policy-rules/${id}/toggle`, { enabled });
+}
+export async function batchPolicyRules(action: BatchAction, ids: string[]): Promise<void> {
+  await client.post('/api/v1/policy-rules/batch', { action, ids });
 }
 export async function getRouteTable(family: 'ipv4' | 'ipv6'): Promise<RouteEntry[]> {
   const { data } = await client.get('/api/v1/route-table', { params: { family } });

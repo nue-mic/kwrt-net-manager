@@ -201,6 +201,19 @@ func (b *storeBackend) SaveRoutes(list []Route) error {
 	return b.flushLocked()
 }
 
+func (b *storeBackend) PolicyRules() ([]PolicyRule, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]PolicyRule(nil), b.st.PolicyRules...), nil
+}
+
+func (b *storeBackend) SavePolicyRules(list []PolicyRule) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.st.PolicyRules = append([]PolicyRule(nil), list...)
+	return b.flushLocked()
+}
+
 func (b *storeBackend) RoutePushMode() (string, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()

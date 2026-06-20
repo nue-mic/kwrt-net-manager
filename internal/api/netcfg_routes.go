@@ -83,6 +83,14 @@ func registerNetcfgRoutes(r chi.Router, d Deps) {
 	r.Post("/api/v1/routes/{id}/toggle", h.ToggleRoute)
 	r.Post("/api/v1/routes/{id}/duplicate", h.DuplicateRoute)
 
+	// Policy routing rules (ip rule / config rule).
+	r.Get("/api/v1/policy-rules", h.ListPolicyRules)
+	r.Post("/api/v1/policy-rules", h.CreatePolicyRule)
+	r.Post("/api/v1/policy-rules/batch", h.BatchPolicyRules)
+	r.Put("/api/v1/policy-rules/{id}", h.UpdatePolicyRule)
+	r.Delete("/api/v1/policy-rules/{id}", h.DeletePolicyRule)
+	r.Post("/api/v1/policy-rules/{id}/toggle", h.TogglePolicyRule)
+
 	// Live kernel routing table.
 	r.Get("/api/v1/route-table", h.RouteTable)
 

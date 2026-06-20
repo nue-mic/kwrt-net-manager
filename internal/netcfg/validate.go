@@ -137,6 +137,9 @@ func validateRoute(r *Route) error {
 	if r.MTU < 0 || r.MTU > 65535 {
 		return errors.New("MTU 范围 0-65535")
 	}
+	if r.Table < 0 || r.Table > 255 {
+		return errors.New("路由表号范围 0-255")
+	}
 	return nil
 }
 

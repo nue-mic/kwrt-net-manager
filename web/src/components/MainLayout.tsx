@@ -194,6 +194,7 @@ const MainLayout: React.FC = () => {
             label: '静态路由',
             children: [
               { key: '/routes', label: '静态路由' },
+              { key: '/policy-rules', label: '策略路由' },
               { key: '/route-table', label: '当前路由表' },
             ],
           },
@@ -280,7 +281,7 @@ const MainLayout: React.FC = () => {
     if (location.pathname.startsWith('/dhcp')) return ['dhcp'];
     if (location.pathname.startsWith('/dns')) return ['dns'];
     if (location.pathname.startsWith('/logs')) return ['logs'];
-    if (location.pathname === '/routes' || location.pathname === '/route-table') return ['routes'];
+    if (location.pathname === '/routes' || location.pathname === '/route-table' || location.pathname === '/policy-rules') return ['routes'];
     return [];
   }, [location.pathname]);
 

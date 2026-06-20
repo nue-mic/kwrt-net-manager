@@ -93,6 +93,22 @@ func (b *uciBackend) SaveRoutes(list []Route) error {
 	return b.apply()
 }
 
+func (b *uciBackend) SavePolicyRules(list []PolicyRule) error {
+	if err := b.storeBackend.SavePolicyRules(list); err != nil {
+		return err
+	}
+	return b.apply()
+}
+
+// ruleSetOrDel：非空则 set，空则 delete（用于 config rule 的可选项）。
+func ruleSetOrDel(nb *strings.Builder, id, key, val string) {
+	if val != "" {
+		fmt.Fprintf(nb, "set network.%s.%s='%s'\n", id, key, val)
+	} else {
+		fmt.Fprintf(nb, "delete network.%s.%s\n", id, key)
+	}
+}
+
 func (b *uciBackend) SaveRoutePushMode(mode string) error {
 	if err := b.storeBackend.SaveRoutePushMode(mode); err != nil {
 		return err
@@ -398,6 +414,35 @@ func (b *uciBackend) apply() error {
 		} else {
 			fmt.Fprintf(&nb, "delete network.%s.mtu\n", id)
 		}
+		if r.Table > 0 {
+			fmt.Fprintf(&nb, "set network.%s.table='%d'\n", id, r.Table)
+		} else {
+			fmt.Fprintf(&nb, "delete network.%s.table\n", id)
+		}
+	}
+	// 策略路由规则 → config rule / rule6（同样只增删本工具 marker 节）。
+	rules, _ := b.storeBackend.PolicyRules()
+	for _, pr := range rules {
+		if !pr.Enabled || !pr.Managed {
+			continue
+		}
+		id := uciName(pr.ID)
+		keepNet[id] = true
+		typ := "rule"
+		if pr.Family == FamilyIPv6 {
+			typ = "rule6"
+		}
+		fmt.Fprintf(&nb, "set network.%s=%s\n", id, typ)
+		fmt.Fprintf(&nb, "set network.%s.%s='%s'\n", id, managedOpt, managedMarker)
+		ruleSetOrDel(&nb, id, "src", pr.Src)
+		ruleSetOrDel(&nb, id, "dest", pr.Dest)
+		ruleSetOrDel(&nb, id, "in", pr.InIface)
+		fmt.Fprintf(&nb, "set network.%s.lookup='%s'\n", id, pr.Lookup)
+		if pr.Priority > 0 {
+			fmt.Fprintf(&nb, "set network.%s.priority='%d'\n", id, pr.Priority)
+		} else {
+			fmt.Fprintf(&nb, "delete network.%s.priority\n", id)
+		}
 	}
 	for n := range existNet {
 		if !keepNet[n] {
@@ -517,6 +562,7 @@ func (b *uciBackend) importExisting() error {
 				ID: s.name, Interface: orAuto(first(s.opts["interface"])),
 				Gateway: first(s.opts["gateway"]), Metric: atoiSafe(first(s.opts["metric"])),
 				Type: first(s.opts["type"]), MTU: atoiSafe(first(s.opts["mtu"])),
+				Table:   atoiSafe(first(s.opts["table"])),
 				Enabled: first(s.opts["disabled"]) != "1",
 			}
 			if s.typ == "route6" {
@@ -536,6 +582,24 @@ func (b *uciBackend) importExisting() error {
 				}
 			}
 			st.Routes = append(st.Routes, r)
+		}
+		// 导入既有 config rule / rule6（仅展示；编辑后才托管）。
+		for _, s := range parseUci(show, "network") {
+			if s.typ != "rule" && s.typ != "rule6" {
+				continue
+			}
+			pr := PolicyRule{
+				ID: s.name, Src: first(s.opts["src"]), Dest: first(s.opts["dest"]),
+				InIface: first(s.opts["in"]), Lookup: first(s.opts["lookup"]),
+				Priority: atoiSafe(first(s.opts["priority"])),
+				Enabled:  first(s.opts["disabled"]) != "1",
+				Managed:  first(s.opts[managedOpt]) == managedMarker,
+			}
+			pr.Family = FamilyIPv4
+			if s.typ == "rule6" {
+				pr.Family = FamilyIPv6
+			}
+			st.PolicyRules = append(st.PolicyRules, pr)
 		}
 	}
 	b.importIPv6Into(&st)

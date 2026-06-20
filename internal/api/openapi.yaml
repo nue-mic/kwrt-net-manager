@@ -654,6 +654,54 @@ paths:
       responses:
         "201": { description: Created }
 
+  /api/v1/policy-rules:
+    get:
+      tags: [route]
+      summary: 策略路由规则列表（ip rule）
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/PolicyRule" } }
+    post:
+      tags: [route]
+      summary: 新增策略路由规则
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PolicyRule" } } }
+      responses:
+        "201": { description: Created }
+  /api/v1/policy-rules/batch:
+    post:
+      tags: [route]
+      summary: 批量启用/停用/删除策略路由
+      responses:
+        "200": { description: OK }
+  /api/v1/policy-rules/{id}:
+    put:
+      tags: [route]
+      summary: 编辑策略路由
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK }
+    delete:
+      tags: [route]
+      summary: 删除策略路由
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK }
+  /api/v1/policy-rules/{id}/toggle:
+    post:
+      tags: [route]
+      summary: 启用/停用策略路由
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK }
+
   /api/v1/route-table:
     get:
       tags: [route]
@@ -1008,9 +1056,22 @@ components:
         metric: { type: integer }
         type: { type: string, enum: ['', unicast, blackhole, unreachable, prohibit], description: "路由类型：黑洞/拒绝/不可达用于封网段" }
         mtu: { type: integer, description: "路由 MTU（0=不设）" }
+        table: { type: integer, description: "路由表号（0=主表；配合策略路由分流）" }
         remark: { type: string }
         enabled: { type: boolean }
         push_to_clients: { type: boolean }
+    PolicyRule:
+      type: object
+      properties:
+        id: { type: string }
+        family: { type: string, enum: [ipv4, ipv6] }
+        enabled: { type: boolean }
+        priority: { type: integer, description: "ip rule 优先级（0=自动）" }
+        src: { type: string, description: "源地址/网段" }
+        dest: { type: string, description: "目标地址/网段" }
+        in_iface: { type: string, description: "入接口" }
+        lookup: { type: string, description: "查询的路由表号" }
+        remark: { type: string }
     RouteEntry:
       type: object
       properties:

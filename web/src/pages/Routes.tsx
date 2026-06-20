@@ -31,6 +31,7 @@ interface RouteForm {
   metric: number;
   type: net.RouteType;
   mtu?: number;
+  table?: number;
   remark: string;
   push_to_clients: boolean;
 }
@@ -83,6 +84,7 @@ export default function RoutesPage() {
         metric: record.metric,
         type: record.type || 'unicast',
         mtu: record.mtu || undefined,
+        table: record.table || undefined,
         remark: record.remark,
         push_to_clients: record.push_to_clients,
       });
@@ -107,6 +109,7 @@ export default function RoutesPage() {
         metric: v.metric,
         type: v.type ?? 'unicast',
         mtu: v.mtu ?? 0,
+        table: v.table ?? 0,
         remark: v.remark,
         enabled: editing ? editing.enabled : true,
         netmask: v.family === 'ipv4' ? v.netmask : '',
@@ -346,6 +349,9 @@ export default function RoutesPage() {
           </Form.Item>
           <Form.Item label="MTU（可选）" name="mtu" extra="此路由的最大报文长度，一般留空（0=不设）。">
             <InputNumber min={0} max={65535} placeholder="留空=不设" style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item label="路由表（可选）" name="table" extra="填表号(1-255)可把此路由放进自定义表，配合「策略路由」按源/接口分流到该表。一般留空走主表。">
+            <InputNumber min={0} max={255} placeholder="留空=主表" style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item label="备注" name="remark">
             <Input />

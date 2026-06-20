@@ -12,6 +12,7 @@ const DhcpStatics = lazy(() => import('./pages/DhcpStatics'));
 const DhcpLeases = lazy(() => import('./pages/DhcpLeases'));
 const DhcpAcl = lazy(() => import('./pages/DhcpAcl'));
 const RoutesPage = lazy(() => import('./pages/Routes'));
+const PolicyRulesPage = lazy(() => import('./pages/PolicyRules'));
 const RouteTable = lazy(() => import('./pages/RouteTable'));
 const DnsSettings = lazy(() => import('./pages/dns/DnsSettings'));
 const DnsCacheStatus = lazy(() => import('./pages/dns/DnsCacheStatus'));
@@ -60,6 +61,7 @@ function App() {
             </Route>
 
             <Route path="routes" element={<RoutesPage />} />
+            <Route path="policy-rules" element={<PolicyRulesPage />} />
             <Route path="route-table" element={<RouteTable />} />
 
             <Route path="dns">

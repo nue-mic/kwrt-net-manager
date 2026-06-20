@@ -421,7 +421,7 @@ func (b *uciBackend) apply() error {
 		}
 	}
 	// 策略路由规则 → config rule / rule6（同样只增删本工具 marker 节）。
-	rules, _ := b.storeBackend.PolicyRules()
+	rules, _ := b.PolicyRules()
 	for _, pr := range rules {
 		if !pr.Enabled || !pr.Managed {
 			continue

@@ -18,6 +18,10 @@ linters:
       - linters:
           - staticcheck
         text: should not use dot imports
+      # QF1001 (De Morgan 律) 套到字符范围校验上反而更难读，保留显式 a<=c<=z 写法。
+      - linters:
+          - staticcheck
+        text: 'QF1001:'
     paths:
       - third_party$
       - builtin$

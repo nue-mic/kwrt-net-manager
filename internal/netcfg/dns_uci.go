@@ -130,6 +130,16 @@ func (b *uciBackend) applyDNS() error {
 	}
 	st.PrevServers, st.PrevAddrs = newServers, newAddrs
 
+	// rebind_domain 白名单列表：同 server/address，只删自己上次写过的精确值再加当前值。
+	newRebind := desiredRebindDomains(st)
+	for _, v := range st.PrevRebindDomains {
+		fmt.Fprintf(&db, "del_list %s.rebind_domain='%s'\n", dnsmasqSec, v)
+	}
+	for _, v := range newRebind {
+		fmt.Fprintf(&db, "add_list %s.rebind_domain='%s'\n", dnsmasqSec, v)
+	}
+	st.PrevRebindDomains = newRebind
+
 	// 4. 自定义解析精确域 → 独立 config hostrecord 具名节（marker 隔离 + GC）。
 	keep := map[string]bool{}
 	for _, r := range records {
@@ -153,7 +163,7 @@ func (b *uciBackend) applyDNS() error {
 
 	// 持久化簿记（SavedStock / Prev*）——每次都写，保证 Prev* 恒等于我们刚写入 UCI 的值，
 	// 杜绝下次 apply 因簿记漂移而漏删旧 server/address（曾出现的残留孤儿）。
-	_ = b.saveDNSBookkeeping(st.SavedStock, st.PrevServers, st.PrevAddrs)
+	_ = b.saveDNSBookkeeping(st.SavedStock, st.PrevServers, st.PrevAddrs, st.PrevRebindDomains)
 
 	var firstErr error
 	if out, err := b.run.Run(db.String(), "uci", "batch"); err != nil {
@@ -266,11 +276,27 @@ func desiredDNSServers(st DNSSettings, doh DNSDoH, routes []DNSDomainRoute) []st
 		if !r.Enabled || !r.Managed {
 			continue
 		}
-		v := "/" + strings.TrimPrefix(r.Domain, "*.") + "/" + r.Server
-		if r.OutIface != "" {
-			v += "@" + r.OutIface
+		dom := strings.TrimPrefix(r.Domain, "*.")
+		// 一个域可配多个上游（逗号/空格/换行分隔）→ 各发一条 server=/域/上游。
+		for _, up := range splitUpstreams(r.Server) {
+			v := "/" + dom + "/" + up
+			if r.OutIface != "" {
+				v += "@" + r.OutIface
+			}
+			out = append(out, v)
 		}
-		out = append(out, v)
+	}
+	return out
+}
+
+// splitUpstreams 把「逗号/空格/换行分隔的多上游」拆成去空白的列表。
+func splitUpstreams(s string) []string {
+	fields := strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' || r == '\t' || r == '\r' })
+	var out []string
+	for _, f := range fields {
+		if f = strings.TrimSpace(f); f != "" {
+			out = append(out, f)
+		}
 	}
 	return out
 }
@@ -283,6 +309,24 @@ func desiredDNSAddrs(records []DNSRecord) []string {
 			continue
 		}
 		out = append(out, "/"+strings.TrimPrefix(r.Domain, "*.")+"/"+r.Address)
+	}
+	return out
+}
+
+// desiredRebindDomains 返回要写入 rebind_domain 的白名单域名（仅托管时；去空白去重）。
+func desiredRebindDomains(st DNSSettings) []string {
+	if !st.Enabled {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, d := range st.RebindDomains {
+		d = strings.TrimSpace(d)
+		if d == "" || seen[d] {
+			continue
+		}
+		seen[d] = true
+		out = append(out, d)
 	}
 	return out
 }

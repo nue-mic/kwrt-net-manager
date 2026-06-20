@@ -1035,6 +1035,7 @@ components:
         dnssec: { type: boolean, description: "DNSSEC 校验" }
         rebind_protection: { type: boolean, description: "防 DNS 重绑定" }
         all_servers: { type: boolean, description: "并发查询所有上游" }
+        rebind_domains: { type: array, items: { type: string }, description: "防重绑定白名单域名" }
     DNSDoH:
       type: object
       properties:

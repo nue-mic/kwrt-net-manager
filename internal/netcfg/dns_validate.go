@@ -102,12 +102,19 @@ func validateDNSDomainRoute(r *DNSDomainRoute) error {
 	if !isPlausibleDomain(r.Domain) {
 		return errors.New("域名格式不合法")
 	}
-	host := r.Server
-	if i := strings.IndexByte(host, '#'); i >= 0 { // 去掉 #port 再校验 IP
-		host = host[:i]
+	// 支持一个域配多个上游（逗号/空格分隔），逐个校验。
+	ups := splitUpstreams(r.Server)
+	if len(ups) == 0 {
+		return errors.New("请至少填写一个上游 DNS")
 	}
-	if !netutil.IsIP(host) {
-		return errors.New("上游 DNS 不是合法的 IP 地址（可带 #端口）")
+	for _, up := range ups {
+		host := up
+		if i := strings.IndexByte(host, '#'); i >= 0 { // 去掉 #port 再校验 IP
+			host = host[:i]
+		}
+		if !netutil.IsIP(host) {
+			return errors.New("上游 DNS「" + up + "」不是合法的 IP 地址（可带 #端口）")
+		}
 	}
 	return nil
 }

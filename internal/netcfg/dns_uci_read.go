@@ -26,6 +26,7 @@ func (b *uciBackend) DNSSettings() (DNSSettings, error) {
 		st.DNSSEC = b.uciGetBool(dnsmasqSec + ".dnssec")
 		st.RebindProtect = b.uciGetBool(dnsmasqSec + ".rebind_protection")
 		st.AllServers = b.uciGetBool(dnsmasqSec + ".allservers")
+		st.RebindDomains = b.uciGetList(dnsmasqSec + ".rebind_domain")
 		var ups []string
 		for _, s := range b.uciGetList(dnsmasqSec + ".server") {
 			if strings.HasPrefix(s, "/") || strings.HasPrefix(s, "127.0.0.1") {

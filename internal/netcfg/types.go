@@ -223,6 +223,8 @@ func CloneState(s State) State {
 	out.DNS.SavedStock = cloneStrMap(s.DNS.SavedStock)
 	out.DNS.PrevServers = append([]string(nil), s.DNS.PrevServers...)
 	out.DNS.PrevAddrs = append([]string(nil), s.DNS.PrevAddrs...)
+	out.DNS.RebindDomains = append([]string(nil), s.DNS.RebindDomains...)
+	out.DNS.PrevRebindDomains = append([]string(nil), s.DNS.PrevRebindDomains...)
 	out.DNSDoH = s.DNSDoH
 	out.DNSRecords = append([]DNSRecord(nil), s.DNSRecords...)
 	out.DNSDomainRoutes = append([]DNSDomainRoute(nil), s.DNSDomainRoutes...)

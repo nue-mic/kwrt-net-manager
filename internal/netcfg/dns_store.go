@@ -79,11 +79,12 @@ func (b *storeBackend) InstallDoH() (string, error) {
 
 // saveDNSBookkeeping 持久化 applyDNS 计算出的内部簿记（SavedStock 快照 + 上次写入的
 // server/address 精确值），供下次 apply 安全回滚 / 只删自己写过的值。
-func (b *storeBackend) saveDNSBookkeeping(savedStock map[string]string, prevServers, prevAddrs []string) error {
+func (b *storeBackend) saveDNSBookkeeping(savedStock map[string]string, prevServers, prevAddrs, prevRebind []string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.st.DNS.SavedStock = savedStock
 	b.st.DNS.PrevServers = prevServers
 	b.st.DNS.PrevAddrs = prevAddrs
+	b.st.DNS.PrevRebindDomains = prevRebind
 	return b.flushLocked()
 }

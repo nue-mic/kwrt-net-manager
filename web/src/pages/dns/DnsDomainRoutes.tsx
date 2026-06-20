@@ -184,8 +184,8 @@ export default function DnsDomainRoutesPage() {
           <Form.Item name="domain" label="域名" rules={[{ required: true, message: '请输入域名' }]}>
             <Input placeholder="如 example.com" allowClear />
           </Form.Item>
-          <Form.Item name="server" label="上游 DNS" rules={[{ required: true, message: '请输入上游 DNS' }]} extra="可带端口，如 8.8.8.8 或 8.8.8.8#5353。">
-            <Input placeholder="如 8.8.8.8" allowClear />
+          <Form.Item name="server" label="上游 DNS" rules={[{ required: true, message: '请输入上游 DNS' }]} extra="可带端口（8.8.8.8#5353）；多个上游用逗号分隔，如 8.8.8.8, 1.1.1.1。">
+            <Input placeholder="如 8.8.8.8 或 8.8.8.8, 1.1.1.1" allowClear />
           </Form.Item>
           <Form.Item name="out_iface" label="出接口（可选）" extra="强制该域解析从指定接口发出（@iface）。一般留空。">
             <Input placeholder="可空，如 wan" allowClear />

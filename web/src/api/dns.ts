@@ -17,6 +17,7 @@ export interface DNSSettings {
   dnssec: boolean;
   rebind_protection: boolean;
   all_servers: boolean;
+  rebind_domains: string[];
 }
 
 export interface DNSDoH {

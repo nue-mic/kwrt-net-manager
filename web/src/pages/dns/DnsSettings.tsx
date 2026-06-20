@@ -17,6 +17,7 @@ interface SettingsForm {
   dnssec: boolean;
   rebind_protection: boolean;
   all_servers: boolean;
+  rebind_domains_text: string;
 }
 
 interface DoHForm {
@@ -51,6 +52,7 @@ export default function DnsSettingsPage() {
         dnssec: s.dnssec,
         rebind_protection: s.rebind_protection,
         all_servers: s.all_servers,
+        rebind_domains_text: (s.rebind_domains ?? []).join('\n'),
       });
       dForm.setFieldsValue({
         enabled: d.enabled,
@@ -86,6 +88,10 @@ export default function DnsSettingsPage() {
         dnssec: !!v.dnssec,
         rebind_protection: !!v.rebind_protection,
         all_servers: !!v.all_servers,
+        rebind_domains: (v.rebind_domains_text ?? '')
+          .split('\n')
+          .map((d) => d.trim())
+          .filter(Boolean),
       });
       message.success('DNS 设置已保存');
       void load();
@@ -197,6 +203,19 @@ export default function DnsSettingsPage() {
             extra="拦截「公网域名解析到内网 IP」的应答，防止恶意网站借此攻击内网设备。一般保持开启。"
           >
             <Switch />
+          </Form.Item>
+          <Form.Item noStyle shouldUpdate={(p, c) => p.rebind_protection !== c.rebind_protection}>
+            {({ getFieldValue }) =>
+              getFieldValue('rebind_protection') ? (
+                <Form.Item
+                  label="重绑定白名单域名"
+                  name="rebind_domains_text"
+                  extra="这些域名允许解析到内网 IP（不被重绑定保护拦截）。一行一个，如某些 NAS/智能家居/内网服务的公网域名。"
+                >
+                  <Input.TextArea rows={3} placeholder={'每行一个域名，例如\nplex.direct\nmy-nas.example.com'} />
+                </Form.Item>
+              ) : null
+            }
           </Form.Item>
           <Form.Item
             label="并发查询所有上游"

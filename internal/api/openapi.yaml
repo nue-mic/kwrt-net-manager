@@ -341,6 +341,20 @@ paths:
       responses:
         "200": { description: OK }
 
+  /api/v1/dhcp/statics/suggest-next-ip:
+    get:
+      tags: [dhcp-static]
+      summary: 池内下一个空闲 IP（供静态分配表单预填，可空）
+      parameters:
+        - { name: interface, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { ip: { type: string } }
   /api/v1/dhcp/statics/arp-bind:
     put:
       tags: [dhcp-static]

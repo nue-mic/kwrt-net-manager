@@ -52,6 +52,7 @@ func registerNetcfgRoutes(r chi.Router, d Deps) {
 	r.Get("/api/v1/dhcp/statics", h.ListStatics)
 	r.Post("/api/v1/dhcp/statics", h.CreateStatic)
 	r.Post("/api/v1/dhcp/statics/batch", h.BatchStatics)
+	r.Get("/api/v1/dhcp/statics/suggest-next-ip", h.SuggestNextIP)
 	r.Put("/api/v1/dhcp/statics/arp-bind", h.SetARPBind)
 	r.Put("/api/v1/dhcp/statics/{id}", h.UpdateStatic)
 	r.Delete("/api/v1/dhcp/statics/{id}", h.DeleteStatic)

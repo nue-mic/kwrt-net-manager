@@ -38,7 +38,7 @@ const DEFAULTS: RouteForm = {
   interface: 'auto',
   target: '',
   netmask: '',
-  prefix: 24,
+  prefix: 64, // IPv6 默认 /64
   gateway: '',
   metric: 1,
   remark: '',
@@ -72,7 +72,9 @@ export default function RoutesPage() {
       });
     } else {
       setEditing(null);
-      form.setFieldsValue(DEFAULTS);
+      // 优先级默认 = 现有最大 + 1（避免与已有路由撞优先级），仍可手改。
+      const nextMetric = data.length ? Math.max(0, ...data.map((r) => r.metric || 0)) + 1 : 1;
+      form.setFieldsValue({ ...DEFAULTS, metric: nextMetric });
     }
     setOpen(true);
   };

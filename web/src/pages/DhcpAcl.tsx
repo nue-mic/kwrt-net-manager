@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { App, Button, Drawer, Form, Input, Modal, Popconfirm, Radio, Space, Table, Tag, Typography } from 'antd';
+import { useMemo, useState } from 'react';
+import { App, AutoComplete, Button, Drawer, Form, Input, Modal, Popconfirm, Radio, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined } from '@ant-design/icons';
 import PageCard from '../components/PageCard';
@@ -14,10 +14,26 @@ interface AclForm {
 export default function DhcpAclPage() {
   const { message } = App.useApp();
   const { data, loading, reload } = useNetData<net.ACL>(() => net.getACL(), { mode: 'blacklist', entries: [] });
+  const { data: leases } = useNetData<net.Lease[]>(() => net.listLeases(), []);
   const [selected, setSelected] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<net.ACLEntry | null>(null);
   const [form] = Form.useForm<AclForm>();
+
+  // 在线终端 → MAC 选择器（保留手输任意 MAC）。
+  const deviceOptions = useMemo(
+    () =>
+      leases.map((l) => ({
+        value: l.mac,
+        label: `${l.hostname || '未知设备'}${l.vendor ? `（${l.vendor}）` : ''} · ${l.ip} · ${l.mac}`,
+      })),
+    [leases],
+  );
+  // 选中终端：备注为空时自动带主机名。
+  const onPickMac = (mac: string) => {
+    const l = leases.find((x) => x.mac === mac);
+    if (l?.hostname && !form.getFieldValue('remark')) form.setFieldsValue({ remark: l.hostname });
+  };
 
   const openDrawer = (record?: net.ACLEntry) => {
     setEditing(record ?? null);
@@ -215,12 +231,19 @@ export default function DhcpAclPage() {
           <Form.Item
             label="MAC"
             name="mac"
+            extra="可从在线终端下拉选，或手输任意 MAC。"
             rules={[
               { required: true, message: '请输入 MAC 地址' },
               { pattern: /^([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}$/, message: 'MAC 格式不正确，如 AA:BB:CC:DD:EE:FF' },
             ]}
           >
-            <Input placeholder="如 AA:BB:CC:DD:EE:FF" />
+            <AutoComplete
+              options={deviceOptions}
+              placeholder="选择在线终端或手输 MAC"
+              onSelect={onPickMac}
+              filterOption={(input, option) => String(option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
+              allowClear
+            />
           </Form.Item>
           <Form.Item label="备注" name="remark">
             <Input placeholder="可选" />

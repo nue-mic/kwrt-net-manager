@@ -548,6 +548,67 @@ func (s *Service) SetLeaseNote(mac, note string) error {
 	return nil
 }
 
+// SuggestNextIP 返回某接口 DHCP 池内「下一个空闲 IPv4」（排除已有静态分配 / 活跃租约 / 网关），
+// 供静态分配表单预填（用户仍可改）。iface 为空时取第一个启用的池；无可用池或池满返回 ""。
+func (s *Service) SuggestNextIP(iface string) string {
+	servers, err := s.be.DHCPServers()
+	if err != nil {
+		return ""
+	}
+	// 优先启用的池；找不到则回退任意池（池停用时用户仍可能想在该网段配静态绑定）。
+	pick := func(enabledOnly bool) *DHCPServer {
+		for i := range servers {
+			if enabledOnly && !servers[i].Enabled {
+				continue
+			}
+			if iface == "" || servers[i].Interface == iface {
+				return &servers[i]
+			}
+		}
+		return nil
+	}
+	pool := pick(true)
+	if pool == nil {
+		pool = pick(false)
+	}
+	if pool == nil {
+		return ""
+	}
+	used := map[uint32]bool{}
+	mark := func(ip string) {
+		if u, ok := netutil.IPv4ToUint32(ip); ok {
+			used[u] = true
+		}
+	}
+	if statics, err := s.be.Statics(); err == nil {
+		for _, st := range statics {
+			mark(st.IP)
+		}
+	}
+	if leases, err := s.be.Leases(); err == nil {
+		for _, l := range leases {
+			mark(l.IP)
+		}
+	}
+	mark(pool.Gateway)
+	return nextFreeIP(*pool, used)
+}
+
+// nextFreeIP 在池 [IPStart, IPEnd] 内返回首个不在 used 中的地址（纯函数，便于单测）。
+func nextFreeIP(pool DHCPServer, used map[uint32]bool) string {
+	startU, ok1 := netutil.IPv4ToUint32(pool.IPStart)
+	endU, ok2 := netutil.IPv4ToUint32(pool.IPEnd)
+	if !ok1 || !ok2 || startU > endU {
+		return ""
+	}
+	for u := startU; u <= endU; u++ {
+		if !used[u] {
+			return netutil.Uint32ToIPv4(u)
+		}
+	}
+	return ""
+}
+
 // FixSubnet reserves every currently-dynamic lease on an interface (iKuai
 // 一键固定同网段). Returns the number of reservations added.
 func (s *Service) FixSubnet(iface string) (int, error) {

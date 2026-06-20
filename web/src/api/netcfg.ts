@@ -206,6 +206,11 @@ export async function reserveLease(body: { ip: string; mac: string; hostname: st
 export async function setLeaseNote(mac: string, remark: string): Promise<void> {
   await client.put('/api/v1/dhcp/leases/note', { mac, remark });
 }
+// 池内下一个空闲 IP（静态分配表单预填用，可空字符串）。
+export async function suggestNextIp(iface = ''): Promise<string> {
+  const { data } = await client.get('/api/v1/dhcp/statics/suggest-next-ip', { params: { interface: iface } });
+  return data.ip ?? '';
+}
 export async function blacklistLease(body: { mac: string; remark: string }): Promise<ACLEntry> {
   const { data } = await client.post('/api/v1/dhcp/leases/blacklist', body);
   return data;

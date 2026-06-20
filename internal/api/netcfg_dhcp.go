@@ -299,6 +299,13 @@ func (h *NetcfgHandler) SetLeaseNote(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
+// SuggestNextIP GET /api/v1/dhcp/statics/suggest-next-ip?interface=<iface>
+// — 返回该接口 DHCP 池内下一个空闲 IP（供静态分配表单预填；无可用则 ip 为空）。
+func (h *NetcfgHandler) SuggestNextIP(w http.ResponseWriter, r *http.Request) {
+	ip := h.svc.SuggestNextIP(r.URL.Query().Get("interface"))
+	WriteJSON(w, http.StatusOK, map[string]any{"ip": ip})
+}
+
 // ================= MAC ACL =================
 
 // GetACL GET /api/v1/dhcp/acl

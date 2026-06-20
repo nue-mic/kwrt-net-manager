@@ -41,6 +41,7 @@ export default function DhcpStaticsPage() {
     { items: [], arp_bind: false },
   );
   const { data: ifaces } = useNetData<net.NetInterface[]>(() => net.listInterfaces(), []);
+  const { data: leases } = useNetData<net.Lease[]>(() => net.listLeases(), []);
 
   const [searchParams] = useSearchParams();
   const [selected, setSelected] = useState<string[]>([]);
@@ -63,6 +64,24 @@ export default function DhcpStaticsPage() {
     () => ifaces.map((i) => ({ label: i.name, value: i.name })),
     [ifaces],
   );
+
+  // 在线终端 → 设备选择器（仅动态租约，静态已在本表）。
+  const deviceOptions = useMemo(
+    () =>
+      leases
+        .filter((l) => !l.static)
+        .map((l) => ({
+          value: l.mac,
+          label: `${l.hostname || '未知设备'}${l.vendor ? `（${l.vendor}）` : ''} · ${l.ip} · ${l.mac}`,
+        })),
+    [leases],
+  );
+
+  // 选一台在线终端：自动带出 IP / MAC / 主机名 / 接口（仍可手改）。
+  const onPickDevice = (mac?: string) => {
+    const l = leases.find((x) => x.mac === mac);
+    if (l) form.setFieldsValue({ hostname: l.hostname, ip: l.ip, mac: l.mac, interface: l.interface });
+  };
 
   const onToggleArpBind = async (e: CheckboxChangeEvent) => {
     try {
@@ -90,6 +109,10 @@ export default function DhcpStaticsPage() {
       });
     } else {
       form.resetFields();
+      // 新增：预填池内下一个空闲 IP，省得手敲（仍可改）。
+      void net.suggestNextIp().then((ip) => {
+        if (ip && !form.getFieldValue('ip')) form.setFieldsValue({ ip });
+      });
     }
     setOpen(true);
   };
@@ -273,6 +296,18 @@ export default function DhcpStaticsPage() {
         }
       >
         <Form form={form} layout="vertical">
+          {!editing && (
+            <Form.Item label="从在线终端选（可选）" extra="选一台在线设备，自动带出 IP / MAC / 主机名 / 接口，下面仍可改。">
+              <Select
+                showSearch
+                allowClear
+                placeholder="选择在线终端，自动填入"
+                options={deviceOptions}
+                filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                onChange={onPickDevice}
+              />
+            </Form.Item>
+          )}
           <Form.Item name="hostname" label="主机名称">
             <Input placeholder="可空，留作终端识别" allowClear />
           </Form.Item>

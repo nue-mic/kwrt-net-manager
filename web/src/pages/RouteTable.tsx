@@ -4,6 +4,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { ReloadOutlined } from '@ant-design/icons';
 import PageCard from '../components/PageCard';
 import { extractErr } from '../hooks/useNetData';
+import { useEventSubscription } from '../events/EventStreamContext';
 import * as net from '../api/netcfg';
 
 type Family = 'ipv4' | 'ipv6';
@@ -40,6 +41,9 @@ export default function RouteTablePage() {
   useEffect(() => {
     void load(family);
   }, [family, load]);
+
+  // 静态路由/接口变更后，内核路由表会变——自动刷新当前族，免手点。
+  useEventSubscription(['route.changed', 'iface.changed', 'ipv6.changed'], () => void load(family));
 
   return (
     <PageCard

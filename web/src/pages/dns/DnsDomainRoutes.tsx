@@ -17,6 +17,7 @@ interface RouteForm {
 export default function DnsDomainRoutesPage() {
   const { message } = App.useApp();
   const { data, loading, reload } = useNetData<dns.DNSDomainRoute[]>(() => dns.listDNSDomainRoutes(), []);
+  const { data: dnsSettings } = useNetData<dns.DNSSettings | null>(() => dns.getDNSSettings(), null);
   const [selected, setSelected] = useState<string[]>([]);
   const [keyword, setKeyword] = useState('');
   const [open, setOpen] = useState(false);
@@ -32,8 +33,13 @@ export default function DnsDomainRoutesPage() {
 
   const openDrawer = (record?: dns.DNSDomainRoute) => {
     setEditing(record ?? null);
-    if (record) form.setFieldsValue({ domain: record.domain, server: record.server, out_iface: record.out_iface, remark: record.remark });
-    else form.resetFields();
+    if (record) {
+      form.setFieldsValue({ domain: record.domain, server: record.server, out_iface: record.out_iface, remark: record.remark });
+    } else {
+      form.resetFields();
+      // 上游默认带全局首选 DNS，省得重输（仍可改）。
+      if (dnsSettings?.dns_primary) form.setFieldsValue({ server: dnsSettings.dns_primary });
+    }
     setOpen(true);
   };
 

@@ -1,18 +1,16 @@
 // Package speedtest 用 OpenWrt 原生包 speedtest-go 实现「线路测速」(仿爱快 应用工具>线路测速)。
 //
-// 第一准则——只迁移 OpenWrt 能原生实现的：
-//   - speedtest-go 纯 Go 单二进制，走 speedtest.net 自动选最近服务器（国内有大量节点），输出
-//     下载/上传 Mbps 与延迟。一键安装走 pkgmgr 自愈回退源。
-//   - **降级**：爱快是自带测速程序+逐秒实时仪表盘；speedtest-go 给最终结果（下载/上传/延迟/
-//     服务器），前端展示「测速中…」+最终结果，非逐秒指针；多线路指定出接口能力有限，先测默认线路。
-//
-// 异步：Run() 起后台测速，Status() 轮询。同一时刻只允许一个测速。
+// 增强：多 speedtest.net 节点挨个测 + 历史趋势 + 全自动（未装自动安装再测）。
+//   - 节点发现：speedtest-go --list（自带每节点延迟探测）。
+//   - 单节点测：speedtest-go --server <id> --json（dl/ul 为 bps，latency/jitter 为纳秒）。
+//   - 一个 job goroutine 串行跑选中节点，逐个更新状态；同一时刻仅一个任务。
+//   - 历史落旁车 DATA_DIR/speedtest_history.json（最近 50 次）。
 package speedtest
 
 import (
 	"errors"
-	"regexp"
-	"strconv"
+	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -25,22 +23,41 @@ type Runner interface {
 	Run(stdin, name string, args ...string) (string, error)
 }
 
-// Result 是一次测速结果。
-type Result struct {
+// Server 是一个候选 speedtest.net 节点。
+type Server struct {
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`    // 城市(国家)
+	Sponsor     string  `json:"sponsor"` // 运营商
+	DistanceKm  float64 `json:"distance_km"`
+	PingMs      float64 `json:"ping_ms"`     // --list 自带延迟；-1=Timeout
+	Reachable   bool    `json:"reachable"`   // 非 Timeout
+	Recommended bool    `json:"recommended"` // 智能默认勾选
+}
+
+// NodeResult 是一个节点的测速结果（含进行态）。
+type NodeResult struct {
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	Sponsor      string  `json:"sponsor"`
+	DistanceKm   float64 `json:"distance_km"`
+	Status       string  `json:"status"` // pending | testing | done | failed
 	DownloadMbps float64 `json:"download_mbps"`
 	UploadMbps   float64 `json:"upload_mbps"`
 	PingMs       float64 `json:"ping_ms"`
-	Server       string  `json:"server"`
-	ISP          string  `json:"isp"`
+	JitterMs     float64 `json:"jitter_ms"`
+	Error        string  `json:"error,omitempty"`
 }
 
-// Status 是测速运行态。
+// Status 是测速任务运行态。
 type Status struct {
-	Running    bool    `json:"running"`
-	Result     *Result `json:"result,omitempty"`
-	Error      string  `json:"error,omitempty"`
-	StartedAt  string  `json:"started_at,omitempty"`
-	FinishedAt string  `json:"finished_at,omitempty"`
+	Phase      string       `json:"phase"` // idle|installing|listing|testing|done|error
+	Running    bool         `json:"running"`
+	Message    string       `json:"message"`
+	Nodes      []NodeResult `json:"nodes"`
+	ISP        string       `json:"isp,omitempty"`
+	StartedAt  string       `json:"started_at,omitempty"`
+	FinishedAt string       `json:"finished_at,omitempty"`
+	Error      string       `json:"error,omitempty"`
 }
 
 // SvcInfo 报告组件状态。
@@ -55,12 +72,22 @@ type Service struct {
 	run       Runner
 	mu        sync.Mutex
 	st        Status
+	gen       int // job 代次：每次 Run 自增；卡死的老 job 解挂后凭它把状态写入变 no-op
 	startedAt time.Time
 	loc       *time.Location
+	histPath  string
+	histMu    sync.Mutex
 }
 
-// New 构造。
-func New(run Runner) *Service { return &Service{run: run, loc: detectLoc(run)} }
+// New 构造。dataDir 用于历史持久化。
+func New(run Runner, dataDir string) *Service {
+	return &Service{
+		run:      run,
+		loc:      detectLoc(run),
+		histPath: filepath.Join(dataDir, "speedtest_history.json"),
+		st:       Status{Phase: "idle"},
+	}
+}
 
 // detectLoc 用 `date +%z` 取系统时区（守护进程常跑 UTC，须按系统时区显示时间）。
 func detectLoc(run Runner) *time.Location {
@@ -82,18 +109,24 @@ func detectLoc(run Runner) *time.Location {
 
 func (s *Service) now() string { return time.Now().In(s.loc).Format("2006-01-02 15:04:05") }
 
-// Status 返回当前测速运行态（拷贝）。
+// Status 返回当前测速运行态（深拷贝 Nodes，避免与 job 写并发）。
 func (s *Service) Status() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.st
+	out := s.st
+	out.Nodes = append([]NodeResult(nil), s.st.Nodes...)
+	return out
 }
 
 // ServiceInfo 探测 speedtest-go 是否已装。
 func (s *Service) ServiceInfo() SvcInfo {
 	pm := pkgmgr.PkgManager(s.run)
+	return SvcInfo{Installed: s.installed(), CanInstall: pm != "", PkgManager: pm}
+}
+
+func (s *Service) installed() bool {
 	_, err := s.run.Run("", "sh", "-c", "command -v speedtest-go")
-	return SvcInfo{Installed: err == nil, CanInstall: pm != "", PkgManager: pm}
+	return err == nil
 }
 
 // Install 一键安装 speedtest-go（自愈回退源）。
@@ -101,77 +134,208 @@ func (s *Service) Install() (string, error) {
 	return pkgmgr.Install(s.run, "speedtest-go")
 }
 
-// Run 起一次后台测速。已在测速中则报错（超过 5 分钟视为卡死的旧任务，允许重跑）。
-func (s *Service) Run() error {
+// Servers 列出附近节点并标记智能默认勾选（供前端节点选择器）。未装则报错。
+func (s *Service) Servers() ([]Server, string, error) {
+	if !s.installed() {
+		return nil, "", errors.New("未安装 speedtest-go")
+	}
+	servers, isp, err := s.listServers()
+	if err != nil {
+		return nil, "", err
+	}
+	pickRecommended(servers, defaultPick)
+	return servers, isp, nil
+}
+
+func (s *Service) listServers() ([]Server, string, error) {
+	out, err := s.run.Run("", "sh", "-c", "speedtest-go --list 2>&1")
+	if err != nil && strings.TrimSpace(out) == "" {
+		return nil, "", err
+	}
+	servers := parseServerList(out)
+	if len(servers) == 0 {
+		return nil, "", errors.New("未发现可用节点：" + lastLine(out))
+	}
+	return servers, parseISP(out), nil
+}
+
+const (
+	defaultPick = 3 // 智能默认勾选节点数
+	maxNodes    = 8 // 单次最多节点（防总耗时过长）
+)
+
+// Run 起一次后台多节点测速。serverIDs 为空=后端自动挑默认。未装会先自动安装。
+func (s *Service) Run(serverIDs []string) error {
 	s.mu.Lock()
-	if s.st.Running && time.Since(s.startedAt) < 5*time.Minute {
+	if s.st.Running && time.Since(s.startedAt) < staleGuard(len(serverIDs)) {
 		s.mu.Unlock()
 		return errors.New("测速正在进行中，请稍候")
 	}
-	if _, err := s.run.Run("", "sh", "-c", "command -v speedtest-go"); err != nil {
-		s.mu.Unlock()
-		return errors.New("未安装 speedtest-go，请先点「一键安装测速组件」")
+	if len(serverIDs) > maxNodes {
+		serverIDs = serverIDs[:maxNodes]
 	}
-	s.st = Status{Running: true, StartedAt: s.now()}
+	s.gen++
+	gen := s.gen
+	s.st = Status{Phase: "starting", Running: true, Message: "准备测速…", StartedAt: s.now()}
 	s.startedAt = time.Now()
 	s.mu.Unlock()
 
-	go func() {
-		// speedtest-go 自动选最近服务器并测下载+上传，内部已有网络超时；本机 busybox 无 timeout
-		// 命令，故不外包 timeout（卡死任务由 Run 的 5 分钟陈旧判定兜底）。
-		out, err := s.run.Run("", "sh", "-c", "speedtest-go 2>&1")
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		s.st.Running = false
-		s.st.FinishedAt = s.now()
-		if err != nil && strings.TrimSpace(out) == "" {
-			s.st.Error = "测速失败：" + err.Error()
-			return
-		}
-		r := parseSpeedtest(out)
-		if r.DownloadMbps == 0 && r.UploadMbps == 0 {
-			s.st.Error = "测速未取得有效结果（服务器不可达或被限速）：" + lastLine(out)
-			return
-		}
-		s.st.Result = &r
-		s.st.Error = ""
-	}()
+	go s.runJob(gen, serverIDs)
 	return nil
 }
 
-// 解析 speedtest-go v1.7.x 文本输出（真机实测格式）：
-//
-//	✓ ISP: 1.2.3.4 (China Unicom) [..,..]
-//	✓ Test Server: [43752] 461.09km Beijing (China) by BJ Unicom
-//	✓ Latency: 20.79ms Jitter: ...
-//	✓ Download: 542.09 Mbps (Used: ...)
-//	✓ Upload: 54.74 Mbps (Used: ...)
-var (
-	reDL   = regexp.MustCompile(`(?i)download[:\s]+([\d.]+)\s*Mbps`)
-	reUL   = regexp.MustCompile(`(?i)upload[:\s]+([\d.]+)\s*Mbps`)
-	rePing = regexp.MustCompile(`(?i)latency[:\s]+([\d.]+)\s*ms`)
-	reSrv  = regexp.MustCompile(`(?i)Test Server[:\s]+(.+)`)
-	reISP  = regexp.MustCompile(`(?i)\bISP:[^(]*\(([^)]+)\)`)
-)
+// staleGuard 卡死兜底时长：节点越多越久，至少 5 分钟。
+func staleGuard(n int) time.Duration {
+	if n < defaultPick {
+		n = defaultPick
+	}
+	d := time.Duration(n) * 90 * time.Second
+	if d < 5*time.Minute {
+		d = 5 * time.Minute
+	}
+	return d
+}
 
-func parseSpeedtest(out string) Result {
-	var r Result
-	if m := reDL.FindStringSubmatch(out); m != nil {
-		r.DownloadMbps, _ = strconv.ParseFloat(m[1], 64)
+func (s *Service) runJob(gen int, serverIDs []string) {
+	// 1) 未装则自动安装。
+	if !s.installed() {
+		if !s.setPhase(gen, "installing", "正在安装测速组件…") {
+			return
+		}
+		if out, err := s.Install(); err != nil {
+			s.fail(gen, "安装测速组件失败："+strings.TrimSpace(lastLine(out)+" "+err.Error()))
+			return
+		}
 	}
-	if m := reUL.FindStringSubmatch(out); m != nil {
-		r.UploadMbps, _ = strconv.ParseFloat(m[1], 64)
+	// 2) 取节点列表（含用户 ISP）。
+	if !s.setPhase(gen, "listing", "正在获取节点列表…") {
+		return
 	}
-	if m := rePing.FindStringSubmatch(out); m != nil {
-		r.PingMs, _ = strconv.ParseFloat(m[1], 64)
+	servers, isp, err := s.listServers()
+	if err != nil {
+		s.fail(gen, "获取节点列表失败："+errMsg(err))
+		return
 	}
-	if m := reSrv.FindStringSubmatch(out); m != nil {
-		r.Server = strings.TrimSpace(m[1])
+	byID := make(map[string]Server, len(servers))
+	for _, sv := range servers {
+		byID[sv.ID] = sv
 	}
-	if m := reISP.FindStringSubmatch(out); m != nil {
-		r.ISP = strings.TrimSpace(m[1])
+	// 3) 解析目标节点（空=自动挑默认）。
+	ids := serverIDs
+	if len(ids) == 0 {
+		pickRecommended(servers, defaultPick)
+		for _, sv := range servers {
+			if sv.Recommended {
+				ids = append(ids, sv.ID)
+			}
+		}
 	}
-	return r
+	if len(ids) == 0 {
+		s.fail(gen, "没有可用节点")
+		return
+	}
+	nodes := make([]NodeResult, 0, len(ids))
+	for _, id := range ids {
+		sv := byID[id]
+		nodes = append(nodes, NodeResult{
+			ID: id, Name: sv.Name, Sponsor: sv.Sponsor, DistanceKm: sv.DistanceKm, Status: "pending",
+		})
+	}
+	if !s.withGen(gen, func() { s.st.ISP = isp; s.st.Nodes = nodes }) {
+		return
+	}
+
+	// 4) 逐个测。
+	for i := range nodes {
+		if !s.updateNode(gen, i, func(n *NodeResult) { n.Status = "testing" }) {
+			return
+		}
+		s.setPhase(gen, "testing", fmt.Sprintf("正在测试 %s（%d/%d）…", nodeLabel(nodes[i]), i+1, len(nodes)))
+		out, runErr := s.run.Run("", "sh", "-c", "speedtest-go --server "+nodes[i].ID+" --json 2>/dev/null")
+		nr, perr := parseNodeJSON(out)
+		if !s.updateNode(gen, i, func(n *NodeResult) {
+			if perr != nil || (nr.DownloadMbps == 0 && nr.UploadMbps == 0) {
+				n.Status = "failed"
+				n.Error = "节点不可达或被限速"
+				if runErr != nil && strings.TrimSpace(out) == "" {
+					n.Error = runErr.Error()
+				}
+				return
+			}
+			n.Status = "done"
+			n.DownloadMbps = nr.DownloadMbps
+			n.UploadMbps = nr.UploadMbps
+			n.PingMs = nr.PingMs
+			n.JitterMs = nr.JitterMs
+		}) {
+			return
+		}
+	}
+	s.finish(gen)
+}
+
+// withGen 在持锁且 gen 仍为当前代次时执行 fn；代次已变（被新 job 取代）返回 false，调用方应退出。
+func (s *Service) withGen(gen int, fn func()) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.gen != gen {
+		return false
+	}
+	fn()
+	return true
+}
+
+func (s *Service) setPhase(gen int, phase, msg string) bool {
+	return s.withGen(gen, func() {
+		s.st.Phase = phase
+		s.st.Message = msg
+	})
+}
+
+func (s *Service) updateNode(gen, i int, fn func(*NodeResult)) bool {
+	return s.withGen(gen, func() {
+		if i >= 0 && i < len(s.st.Nodes) {
+			fn(&s.st.Nodes[i])
+		}
+	})
+}
+
+func (s *Service) fail(gen int, msg string) {
+	s.withGen(gen, func() {
+		s.st.Running = false
+		s.st.Phase = "error"
+		s.st.Error = msg
+		s.st.Message = "测速失败"
+		s.st.FinishedAt = s.now()
+	})
+}
+
+func (s *Service) finish(gen int) {
+	var nodes []NodeResult
+	ok := s.withGen(gen, func() {
+		s.st.Running = false
+		s.st.Phase = "done"
+		s.st.Message = "测速完成"
+		s.st.FinishedAt = s.now()
+		nodes = append([]NodeResult(nil), s.st.Nodes...)
+	})
+	if ok {
+		s.appendHistory(nodes)
+	}
+}
+
+func nodeLabel(n NodeResult) string {
+	if n.Sponsor != "" {
+		return n.Name + " · " + n.Sponsor
+	}
+	return n.Name
+}
+
+func errMsg(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 func lastLine(out string) string {

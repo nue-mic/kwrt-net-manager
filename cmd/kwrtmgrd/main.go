@@ -127,8 +127,8 @@ func runServe(args []string) int {
 	// device 条目（按终端 MAC 解析 GUA）后台轮询：MAC→稳定 IPv6 写缓存，供 ddns-scripts ip_source='script' 拾取。
 	// IPv6 主线无 lease ubus 事件，故轮询（60s）。非 OpenWrt 环境解析为空 → 无副作用。
 	ddnsSvc.StartDevicePoller(arpCtx, 60*time.Second)
-	// 线路测速（OpenWrt speedtest-go）。
-	speedSvc := speedtest.New(pkgmgr.RealRunner{})
+	// 线路测速（OpenWrt speedtest-go；多节点 + 历史落 DATA_DIR/speedtest_history.json）。
+	speedSvc := speedtest.New(pkgmgr.RealRunner{}, cfg.DataDir)
 
 	// Backup payload builder (meta.json + netcfg export).
 	exportSrc := api.NewExportSource(st, nsvc, logger)

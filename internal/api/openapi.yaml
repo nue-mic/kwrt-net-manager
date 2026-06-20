@@ -800,10 +800,32 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SpeedtestStatus" }
+  /api/v1/speedtest/servers:
+    get:
+      tags: [speedtest]
+      summary: 附近 speedtest.net 节点（含 recommended 智能默认勾选；未装返回 installed=false）
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  installed: { type: boolean }
+                  isp: { type: string }
+                  items: { type: array, items: { $ref: "#/components/schemas/SpeedtestServer" } }
   /api/v1/speedtest/run:
     post:
       tags: [speedtest]
-      summary: 起一次线路测速（speedtest-go，异步）
+      summary: 起一次多节点线路测速（异步）；server_ids 空=自动挑默认；未装自动安装
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                server_ids: { type: array, items: { type: string } }
       responses:
         "200": { description: OK }
   /api/v1/speedtest/service:
@@ -816,6 +838,25 @@ paths:
     post:
       tags: [speedtest]
       summary: 一键安装 speedtest-go（自愈回退源）
+      responses:
+        "200": { description: OK }
+  /api/v1/speedtest/history:
+    get:
+      tags: [speedtest]
+      summary: 测速历史（最新在前）
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/SpeedtestHistoryEntry" } }
+  /api/v1/speedtest/history/clear:
+    post:
+      tags: [speedtest]
+      summary: 清空测速历史
       responses:
         "200": { description: OK }
 
@@ -1062,21 +1103,49 @@ components:
         ipv6: { type: string, description: "当前解析到的稳定全球 IPv6（GUA），可空" }
         source: { type: string, enum: [dhcpv6, slaac, neighbor], description: "GUA 来源：DHCPv6 租约 / EUI-64 稳定 SLAAC / 邻居表" }
         vendor: { type: string, description: "OUI 厂商识别" }
+    SpeedtestServer:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string, description: "城市(国家)" }
+        sponsor: { type: string, description: "运营商" }
+        distance_km: { type: number }
+        ping_ms: { type: number, description: "--list 自带延迟；-1=Timeout" }
+        reachable: { type: boolean }
+        recommended: { type: boolean, description: "智能默认勾选" }
+    SpeedtestNode:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        sponsor: { type: string }
+        distance_km: { type: number }
+        status: { type: string, enum: [pending, testing, done, failed] }
+        download_mbps: { type: number }
+        upload_mbps: { type: number }
+        ping_ms: { type: number }
+        jitter_ms: { type: number }
+        error: { type: string }
     SpeedtestStatus:
       type: object
       properties:
+        phase: { type: string, enum: [idle, starting, installing, listing, testing, done, error] }
         running: { type: boolean }
+        message: { type: string, description: "当前阶段中文提示" }
+        isp: { type: string }
         error: { type: string }
         started_at: { type: string }
         finished_at: { type: string }
-        result:
-          type: object
-          properties:
-            download_mbps: { type: number }
-            upload_mbps: { type: number }
-            ping_ms: { type: number }
-            server: { type: string }
-            isp: { type: string }
+        nodes: { type: array, items: { $ref: "#/components/schemas/SpeedtestNode" } }
+    SpeedtestHistoryEntry:
+      type: object
+      properties:
+        time: { type: string }
+        best_node: { type: string }
+        best_download_mbps: { type: number }
+        best_upload_mbps: { type: number }
+        min_ping_ms: { type: number }
+        nodes: { type: array, items: { $ref: "#/components/schemas/SpeedtestNode" } }
     NetIface:
       type: object
       properties:

@@ -73,19 +73,39 @@ export default function DialLogConsole({ iface }: { iface?: string }) {
   const stoppedRef = useRef(false);
   const followRef = useRef(true);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const pendingRef = useRef<LogEntry[]>([]); // 收帧缓冲：onmessage 只入队，由定时器批量 flush
+  const bannerRef = useRef<DialDiagnosis | null>(null);
   followRef.current = follow;
 
-  // 新拨号周期开始(pppd started / 进入 connecting) → 横幅暂置「拨号中」，等终态覆盖。
+  // onFrame 由 WS onmessage 调用——必须 O(1)、不触发渲染，否则高频帧会打满主线程、
+  // 导致浏览器排空 WS 队列变慢→服务端写超时→重连风暴。仅入缓冲，渲染交给 flush 定时器。
   const onFrame = useCallback((e: LogEntry) => {
-    setLines((prev) => {
-      const next = prev.length >= MAX_LINES ? prev.slice(prev.length - MAX_LINES + 1) : prev;
-      return [...next, e];
-    });
-    if (e.severity === 'success' || e.severity === 'error' || e.severity === 'warning') {
-      if (e.diagnosis) setBanner(frameToBanner(e));
-    } else if (e.dial_state === 'connecting' && /started by|PADI/i.test(e.message || '')) {
-      setBanner({ dial_state: 'connecting', severity: 'info', headline: '拨号进行中…', iface: e.iface, updated_at: e.time });
-    }
+    pendingRef.current.push(e);
+  }, []);
+
+  // flush：每 ~180ms 把缓冲里的帧一次性并入列表并重算横幅（封顶 ~6 次渲染/秒），
+  // 把任意到达速率（含连上时 replay 的一大批）合并成极少次渲染，根治卡顿。
+  useEffect(() => {
+    const flush = () => {
+      const buf = pendingRef.current;
+      if (buf.length === 0) return;
+      pendingRef.current = [];
+      let nextBanner = bannerRef.current;
+      for (const e of buf) {
+        if ((e.severity === 'success' || e.severity === 'error' || e.severity === 'warning') && e.diagnosis) {
+          nextBanner = frameToBanner(e);
+        } else if (e.dial_state === 'connecting' && /started by|PADI/i.test(e.message || '')) {
+          nextBanner = { dial_state: 'connecting', severity: 'info', headline: '拨号进行中…', iface: e.iface, updated_at: e.time };
+        }
+      }
+      if (nextBanner !== bannerRef.current) { bannerRef.current = nextBanner; setBanner(nextBanner); }
+      setLines((prev) => {
+        const merged = prev.concat(buf);
+        return merged.length > MAX_LINES ? merged.slice(merged.length - MAX_LINES) : merged;
+      });
+    };
+    const t = window.setInterval(flush, 180);
+    return () => window.clearInterval(t);
   }, []);
 
   const scheduleReconnect = useCallback((connect: () => void) => {
@@ -127,7 +147,9 @@ export default function DialLogConsole({ iface }: { iface?: string }) {
   useEffect(() => {
     stoppedRef.current = false;
     // 先取一次诊断结论，横幅即时有内容（即便此刻没有新拨号）。
-    dialDiagnose(iface).then((d) => { if (!stoppedRef.current && d.dial_state !== 'unknown') setBanner(d); }).catch(() => {});
+    dialDiagnose(iface).then((d) => {
+      if (!stoppedRef.current && d.dial_state !== 'unknown') { bannerRef.current = d; setBanner(d); }
+    }).catch(() => {});
     connect();
     return () => {
       stoppedRef.current = true;
@@ -175,7 +197,7 @@ export default function DialLogConsole({ iface }: { iface?: string }) {
         </Tag>
         <span><Switch size="small" checked={errorOnly} onChange={setErrorOnly} /> 仅看错误</span>
         <span><Switch size="small" checked={follow} onChange={setFollow} checkedChildren="跟随" unCheckedChildren="暂停" /> 自动滚动</span>
-        <Button size="small" icon={<ClearOutlined />} onClick={() => { setLines([]); }}>清屏</Button>
+        <Button size="small" icon={<ClearOutlined />} onClick={() => { pendingRef.current = []; setLines([]); }}>清屏</Button>
         <Button size="small" icon={<DownloadOutlined />} onClick={() => downloadLogs('dialup', {})}>导出</Button>
         <Text type="secondary">{shown.length} 行</Text>
       </Space>
@@ -195,7 +217,7 @@ export default function DialLogConsole({ iface }: { iface?: string }) {
           </div>
         ) : (
           shown.map((l, i) => (
-            <div key={(l.seq ?? i) + '-' + i} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+            <div key={l.seq ?? `${l.ts}-${i}`} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
               <span style={{ color: '#5c6370' }}>{l.time?.slice(11) || ''}</span>{' '}
               <span style={{ color: '#7f848e' }}>[{PHASE_LABEL[l.phase || ''] || (l.proc ?? '')}]</span>{' '}
               <span style={{ color: sevColor(l.severity) }}>{l.message}</span>

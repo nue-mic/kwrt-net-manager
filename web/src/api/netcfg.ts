@@ -68,6 +68,8 @@ export interface ACL {
   entries: ACLEntry[];
 }
 
+export type RouteType = '' | 'unicast' | 'blackhole' | 'unreachable' | 'prohibit';
+
 export interface Route {
   id: string;
   family: 'ipv4' | 'ipv6';
@@ -77,6 +79,8 @@ export interface Route {
   prefix: number;
   gateway: string;
   metric: number;
+  type: RouteType; // 正常/黑洞/拒绝/不可达
+  mtu: number; // 0=不设
   remark: string;
   enabled: boolean;
   push_to_clients: boolean;

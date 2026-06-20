@@ -108,8 +108,12 @@ type Route struct {
 	Prefix    int    `json:"prefix"`    // CIDR 前缀长度
 	Gateway   string `json:"gateway"`   // 网关
 	Metric    int    `json:"metric"`    // 优先级（越小越优先）
-	Remark    string `json:"remark"`    // 备注
-	Enabled   bool   `json:"enabled"`   // 状态
+	// Type：路由类型。""/"unicast"=正常单播路由；"blackhole"=黑洞(静默丢包)；
+	// "unreachable"=不可达(回 ICMP)；"prohibit"=禁止(回 ICMP)。后三者无下一跳，不需网关。
+	Type    string `json:"type"`
+	MTU     int    `json:"mtu"`     // 路由 MTU（0=不设）
+	Remark  string `json:"remark"`  // 备注
+	Enabled bool   `json:"enabled"` // 状态
 	// PushToClients：把本路由经 DHCP option 121/249 下发给客户端，让"网关指向主路由"的
 	// 设备也能把该网段流量引到本旁路由（仅 IPv4 有效；受 State.RoutePushMode 总开关控制）。
 	PushToClients bool `json:"push_to_clients"`

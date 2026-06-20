@@ -553,7 +553,7 @@ func TestUCIRoutePushTaggedHostLevel(t *testing.T) {
 }
 
 func TestLeasetimeToMin(t *testing.T) {
-	cases := map[string]int{"12h": 720, "120m": 120, "1d": 1440, "infinite": 0, "": 0, "30s": 1, "3600": 60}
+	cases := map[string]int{"12h": 720, "120m": 120, "1d": 1440, "infinite": 0, "": -1, "30s": 1, "3600": 60}
 	for in, want := range cases {
 		if got := leasetimeToMin(in); got != want {
 			t.Errorf("leasetimeToMin(%q) = %d want %d", in, got, want)

@@ -14,6 +14,9 @@ export interface DNSSettings {
   min_cache_ttl: number;
   max_cache_ttl: number;
   force_proxy: boolean;
+  dnssec: boolean;
+  rebind_protection: boolean;
+  all_servers: boolean;
 }
 
 export interface DNSDoH {

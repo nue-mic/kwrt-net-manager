@@ -37,8 +37,8 @@ func validateDHCPServer(s *DHCPServer) error {
 	if s.DNSSecondary != "" && !netutil.IsIPv4(s.DNSSecondary) {
 		return errors.New("备选 DNS 不是合法的 IPv4 地址")
 	}
-	if s.LeaseMinutes <= 0 {
-		return errors.New("租期（分钟）必须大于 0")
+	if s.LeaseMinutes < 0 {
+		return errors.New("租期不能为负（0 表示永久）")
 	}
 	for _, line := range s.Exclude {
 		if strings.TrimSpace(line) == "" {
@@ -129,8 +129,19 @@ func validateRoute(r *Route) error {
 	if r.Metric < 0 {
 		return errors.New("优先级不能为负")
 	}
+	switch r.Type {
+	case "", "unicast", "blackhole", "unreachable", "prohibit":
+	default:
+		return errors.New("路由类型不合法")
+	}
+	if r.MTU < 0 || r.MTU > 65535 {
+		return errors.New("MTU 范围 0-65535")
+	}
 	return nil
 }
+
+// routeHasNexthop 报告该路由是否有下一跳（黑洞/拒绝/不可达类型无下一跳，不需网关）。
+func routeHasNexthop(typ string) bool { return typ == "" || typ == "unicast" }
 
 // validateACLEntry checks + normalizes a MAC ACL entry.
 func validateACLEntry(e *ACLEntry) error {

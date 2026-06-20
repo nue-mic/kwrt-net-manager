@@ -23,6 +23,9 @@ func (b *uciBackend) DNSSettings() (DNSSettings, error) {
 		st.MinCacheTTL = b.uciGetInt(dnsmasqSec + ".min_cache_ttl")
 		st.MaxCacheTTL = b.uciGetInt(dnsmasqSec + ".max_cache_ttl")
 		st.NoResolv = b.uciGetBool(dnsmasqSec + ".noresolv")
+		st.DNSSEC = b.uciGetBool(dnsmasqSec + ".dnssec")
+		st.RebindProtect = b.uciGetBool(dnsmasqSec + ".rebind_protection")
+		st.AllServers = b.uciGetBool(dnsmasqSec + ".allservers")
 		var ups []string
 		for _, s := range b.uciGetList(dnsmasqSec + ".server") {
 			if strings.HasPrefix(s, "/") || strings.HasPrefix(s, "127.0.0.1") {

@@ -52,9 +52,35 @@ interface ServerFormValues {
   gateway: string;
   dns_primary: string;
   dns_secondary: string;
-  lease_minutes: number;
+  lease_value: number;
+  lease_unit: 'm' | 'h' | 'd' | 'inf';
   custom_options: CustomOptionRow[];
 }
+
+// 租期分钟 ↔ 数值+单位 互转（让用户填「2 小时」而非「120 分钟」；0=永久）。
+function minutesToUnit(min: number): { lease_value: number; lease_unit: 'm' | 'h' | 'd' | 'inf' } {
+  if (min <= 0) return { lease_value: 0, lease_unit: 'inf' };
+  if (min % 1440 === 0) return { lease_value: min / 1440, lease_unit: 'd' };
+  if (min % 60 === 0) return { lease_value: min / 60, lease_unit: 'h' };
+  return { lease_value: min, lease_unit: 'm' };
+}
+function unitToMinutes(value: number, unit: string): number {
+  if (unit === 'inf') return 0; // 永久
+  const f = unit === 'h' ? 60 : unit === 'd' ? 1440 : 1;
+  return Math.max(0, Math.round((value || 0) * f));
+}
+
+// 常用自定义 DHCP 选项预设：选了自动带出选项号，免得记数字。
+const COMMON_OPTIONS = [
+  { code: 42, name: 'NTP 时间服务器' },
+  { code: 15, name: '域名后缀 (Domain)' },
+  { code: 119, name: '搜索域 (Search Domain)' },
+  { code: 44, name: 'WINS 服务器' },
+  { code: 66, name: 'TFTP 服务器 (PXE)' },
+  { code: 67, name: '启动文件名 (PXE)' },
+  { code: 252, name: 'WPAD 自动代理' },
+  { code: 26, name: '接口 MTU' },
+];
 
 export default function DhcpServersPage() {
   const { message } = App.useApp();
@@ -135,7 +161,8 @@ export default function DhcpServersPage() {
     form.setFieldsValue({
       force: true,
       exclude_text: '',
-      lease_minutes: 120,
+      lease_value: 2,
+      lease_unit: 'h',
       custom_options: [],
       interface: iface,
       netmask: mask,
@@ -189,7 +216,7 @@ export default function DhcpServersPage() {
         gateway: record.gateway,
         dns_primary: record.dns_primary,
         dns_secondary: record.dns_secondary,
-        lease_minutes: record.lease_minutes,
+        ...minutesToUnit(record.lease_minutes),
         custom_options: record.custom_options.map((o) => ({ code: o.code, value: o.value })),
       });
     } else {
@@ -197,7 +224,8 @@ export default function DhcpServersPage() {
       form.setFieldsValue({
         force: true, // 默认强制下发：旁路由/同网段多 DHCP 时也能稳定分配
         exclude_text: '',
-        lease_minutes: 120,
+        lease_value: 2,
+        lease_unit: 'h', // 默认 2 小时
         custom_options: [],
       });
     }
@@ -225,7 +253,7 @@ export default function DhcpServersPage() {
         gateway: v.gateway,
         dns_primary: v.dns_primary,
         dns_secondary: v.dns_secondary,
-        lease_minutes: v.lease_minutes,
+        lease_minutes: unitToMinutes(v.lease_value, v.lease_unit),
         exclude,
         custom_options,
       };
@@ -346,7 +374,12 @@ export default function DhcpServersPage() {
       title: '租期',
       dataIndex: 'lease_minutes',
       width: 90,
-      render: (v: number) => `${v} 分`,
+      render: (v: number) => {
+        if (v <= 0) return '永久';
+        if (v % 1440 === 0) return `${v / 1440} 天`;
+        if (v % 60 === 0) return `${v / 60} 小时`;
+        return `${v} 分`;
+      },
     },
     { title: '剩余地址', dataIndex: 'remaining', width: 90 },
     {
@@ -551,12 +584,30 @@ export default function DhcpServersPage() {
           <Form.Item label="备选DNS" name="dns_secondary">
             <Input placeholder="例如 8.8.8.8" />
           </Form.Item>
-          <Form.Item
-            label="租期（分钟）"
-            name="lease_minutes"
-            rules={[{ required: true, message: '请输入租期' }]}
-          >
-            <InputNumber min={0} style={{ width: '100%' }} />
+          <Form.Item label="租期" tooltip="设备超过此时长未续租，地址会被回收重分配；选「永久」则不过期。">
+            <Form.Item noStyle shouldUpdate={(p, c) => p.lease_unit !== c.lease_unit}>
+              {({ getFieldValue }) => {
+                const inf = getFieldValue('lease_unit') === 'inf';
+                return (
+                  <Space.Compact style={{ width: '100%' }}>
+                    <Form.Item name="lease_value" noStyle rules={inf ? [] : [{ required: true, message: '请输入租期数值' }]}>
+                      <InputNumber min={1} disabled={inf} style={{ width: '100%' }} placeholder={inf ? '永久不过期' : '数值'} />
+                    </Form.Item>
+                    <Form.Item name="lease_unit" noStyle>
+                      <Select
+                        style={{ width: 110 }}
+                        options={[
+                          { value: 'm', label: '分钟' },
+                          { value: 'h', label: '小时' },
+                          { value: 'd', label: '天' },
+                          { value: 'inf', label: '永久' },
+                        ]}
+                      />
+                    </Form.Item>
+                  </Space.Compact>
+                );
+              }}
+            </Form.Item>
           </Form.Item>
           <Form.Item
             label="强制下发 DHCP"
@@ -591,14 +642,18 @@ export default function DhcpServersPage() {
                     </Typography.Link>
                   </Space>
                 ))}
-                <Button
-                  type="dashed"
-                  block
-                  icon={<PlusOutlined />}
-                  onClick={() => add({ code: null, value: '' })}
-                >
-                  添加选项
-                </Button>
+                <Space wrap>
+                  <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ code: null, value: '' })}>
+                    手动添加
+                  </Button>
+                  <Select
+                    placeholder="+ 常用选项（自动带选项号）"
+                    style={{ width: 240 }}
+                    value={null}
+                    onSelect={(code) => add({ code: Number(code), value: '' })}
+                    options={COMMON_OPTIONS.map((o) => ({ value: o.code, label: `${o.code} · ${o.name}` }))}
+                  />
+                </Space>
               </div>
             )}
           </Form.List>

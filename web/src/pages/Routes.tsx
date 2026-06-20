@@ -29,6 +29,8 @@ interface RouteForm {
   prefix: number;
   gateway: string;
   metric: number;
+  type: net.RouteType;
+  mtu?: number;
   remark: string;
   push_to_clients: boolean;
 }
@@ -41,9 +43,19 @@ const DEFAULTS: RouteForm = {
   prefix: 64, // IPv6 默认 /64
   gateway: '',
   metric: 1,
+  type: 'unicast',
+  mtu: undefined,
   remark: '',
   push_to_clients: false,
 };
+
+// 路由类型选项 + 人话说明（黑洞=直接丢包，常用于封某网段）。
+const TYPE_OPTIONS = [
+  { value: 'unicast', label: '正常路由（走网关转发）' },
+  { value: 'blackhole', label: '黑洞 — 丢弃流量（封网段，不回应）' },
+  { value: 'unreachable', label: '不可达 — 丢弃并回「目标不可达」' },
+  { value: 'prohibit', label: '禁止 — 丢弃并回「通信被禁止」' },
+];
 
 export default function RoutesPage() {
   const { message } = App.useApp();
@@ -55,6 +67,8 @@ export default function RoutesPage() {
   const [editing, setEditing] = useState<net.Route | null>(null);
   const [form] = Form.useForm<RouteForm>();
   const family = Form.useWatch('family', form);
+  const routeType = (Form.useWatch('type', form) ?? 'unicast') as net.RouteType;
+  const hasNexthop = routeType === '' || routeType === 'unicast';
 
   const openDrawer = (record?: net.Route) => {
     if (record) {
@@ -67,6 +81,8 @@ export default function RoutesPage() {
         prefix: record.prefix,
         gateway: record.gateway,
         metric: record.metric,
+        type: record.type || 'unicast',
+        mtu: record.mtu || undefined,
         remark: record.remark,
         push_to_clients: record.push_to_clients,
       });
@@ -82,17 +98,20 @@ export default function RoutesPage() {
   const onSave = async () => {
     try {
       const v = await form.validateFields();
+      const nexthop = v.type === '' || v.type === 'unicast';
       const body: net.RouteInput = {
         family: v.family,
         interface: v.interface,
         target: v.target,
-        gateway: v.gateway,
+        gateway: nexthop ? v.gateway : '', // 黑洞/拒绝/不可达无下一跳
         metric: v.metric,
+        type: v.type ?? 'unicast',
+        mtu: v.mtu ?? 0,
         remark: v.remark,
         enabled: editing ? editing.enabled : true,
         netmask: v.family === 'ipv4' ? v.netmask : '',
         prefix: v.family === 'ipv4' ? 0 : v.prefix,
-        push_to_clients: v.family === 'ipv4' ? !!v.push_to_clients : false,
+        push_to_clients: v.family === 'ipv4' && nexthop ? !!v.push_to_clients : false,
       };
       if (editing) {
         await net.updateRoute(editing.id, body);
@@ -161,6 +180,16 @@ export default function RoutesPage() {
       title: '子网掩码',
       render: (_: unknown, r: net.Route) =>
         r.family === 'ipv4' ? `${r.netmask} (/${r.prefix})` : `/${r.prefix}`,
+    },
+    {
+      title: '类型',
+      dataIndex: 'type',
+      width: 90,
+      render: (v: net.RouteType) => {
+        if (!v || v === 'unicast') return <Tag>正常</Tag>;
+        const m: Record<string, string> = { blackhole: '黑洞', unreachable: '不可达', prohibit: '禁止' };
+        return <Tag color="volcano">{m[v] ?? v}</Tag>;
+      },
     },
     { title: '网关', dataIndex: 'gateway', render: (v: string) => v || '-' },
     { title: '优先级', dataIndex: 'metric' },
@@ -284,6 +313,9 @@ export default function RoutesPage() {
               ]}
             />
           </Form.Item>
+          <Form.Item label="路由类型" name="type" extra="正常路由走网关；黑洞/不可达/禁止用于「封某个网段」（直接丢弃流量，无需网关）。">
+            <Select options={TYPE_OPTIONS} />
+          </Form.Item>
           <Form.Item label="线路" name="interface" rules={[{ required: true }]}>
             <Select
               options={[
@@ -304,16 +336,21 @@ export default function RoutesPage() {
               <Input placeholder="255.255.255.0" />
             </Form.Item>
           )}
-          <Form.Item label="网关" name="gateway">
-            <Input placeholder="如 192.168.1.1" />
-          </Form.Item>
+          {hasNexthop && (
+            <Form.Item label="网关" name="gateway">
+              <Input placeholder="如 192.168.1.1" />
+            </Form.Item>
+          )}
           <Form.Item label="优先级" name="metric" extra="数值越小优先级越高">
             <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item label="MTU（可选）" name="mtu" extra="此路由的最大报文长度，一般留空（0=不设）。">
+            <InputNumber min={0} max={65535} placeholder="留空=不设" style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item label="备注" name="remark">
             <Input />
           </Form.Item>
-          {family !== 'ipv6' && (
+          {family !== 'ipv6' && hasNexthop && (
             <Form.Item
               label="下发给客户端 (DHCP 选项 121)"
               name="push_to_clients"

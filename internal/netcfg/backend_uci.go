@@ -187,7 +187,11 @@ func (b *uciBackend) apply() error {
 		fmt.Fprintf(&d, "set dhcp.%s.interface='%s'\n", id, s.Interface)
 		fmt.Fprintf(&d, "set dhcp.%s.start='%d'\n", id, start)
 		fmt.Fprintf(&d, "set dhcp.%s.limit='%d'\n", id, limit)
-		fmt.Fprintf(&d, "set dhcp.%s.leasetime='%dm'\n", id, s.LeaseMinutes)
+		if s.LeaseMinutes <= 0 {
+			fmt.Fprintf(&d, "set dhcp.%s.leasetime='infinite'\n", id) // 0=永久
+		} else {
+			fmt.Fprintf(&d, "set dhcp.%s.leasetime='%dm'\n", id, s.LeaseMinutes)
+		}
 		// 强制下发：force='1' 跳过 dnsmasq init 的"本网段已有 DHCP 服务器则礼让退出"探测
 		// （dhcp_check）。旁路由/同网段多 DHCP 场景必备，否则探测命中后整段不发地址。
 		if s.Force {
@@ -376,12 +380,24 @@ func (b *uciBackend) apply() error {
 			fmt.Fprintf(&nb, "set network.%s.target='%s'\n", id, r.Target)
 			fmt.Fprintf(&nb, "set network.%s.netmask='%s'\n", id, r.Netmask)
 		}
-		if r.Gateway != "" {
-			fmt.Fprintf(&nb, "set network.%s.gateway='%s'\n", id, r.Gateway)
-		} else {
+		// 路由类型：非单播（黑洞/拒绝/不可达）无下一跳，不写网关。
+		if !routeHasNexthop(r.Type) {
+			fmt.Fprintf(&nb, "set network.%s.type='%s'\n", id, r.Type)
 			fmt.Fprintf(&nb, "delete network.%s.gateway\n", id)
+		} else {
+			fmt.Fprintf(&nb, "delete network.%s.type\n", id)
+			if r.Gateway != "" {
+				fmt.Fprintf(&nb, "set network.%s.gateway='%s'\n", id, r.Gateway)
+			} else {
+				fmt.Fprintf(&nb, "delete network.%s.gateway\n", id)
+			}
 		}
 		fmt.Fprintf(&nb, "set network.%s.metric='%d'\n", id, r.Metric)
+		if r.MTU > 0 {
+			fmt.Fprintf(&nb, "set network.%s.mtu='%d'\n", id, r.MTU)
+		} else {
+			fmt.Fprintf(&nb, "delete network.%s.mtu\n", id)
+		}
 	}
 	for n := range existNet {
 		if !keepNet[n] {
@@ -474,7 +490,7 @@ func (b *uciBackend) importExisting() error {
 						}
 					}
 				}
-				if srv.LeaseMinutes <= 0 {
+				if srv.LeaseMinutes < 0 { // <0=缺省兜底；0=用户设的永久，保留
 					srv.LeaseMinutes = 120
 				}
 				st.DHCPServers = append(st.DHCPServers, srv)
@@ -500,6 +516,7 @@ func (b *uciBackend) importExisting() error {
 			r := Route{
 				ID: s.name, Interface: orAuto(first(s.opts["interface"])),
 				Gateway: first(s.opts["gateway"]), Metric: atoiSafe(first(s.opts["metric"])),
+				Type: first(s.opts["type"]), MTU: atoiSafe(first(s.opts["mtu"])),
 				Enabled: first(s.opts["disabled"]) != "1",
 			}
 			if s.typ == "route6" {
@@ -1010,8 +1027,11 @@ func uciName(id string) string {
 // leasetimeToMin converts a uci leasetime ("12h","120m","1d","infinite") to minutes.
 func leasetimeToMin(s string) int {
 	s = strings.TrimSpace(s)
-	if s == "" || s == "infinite" {
-		return 0
+	if s == "infinite" {
+		return 0 // 0 = 永久
+	}
+	if s == "" {
+		return -1 // 缺省/未知：交给导入处兜底为 120（区别于 infinite 的 0）
 	}
 	unit := s[len(s)-1]
 	num := atoiSafe(s[:len(s)-1])

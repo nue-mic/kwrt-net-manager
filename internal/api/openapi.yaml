@@ -1006,6 +1006,8 @@ components:
         prefix: { type: integer }
         gateway: { type: string }
         metric: { type: integer }
+        type: { type: string, enum: ['', unicast, blackhole, unreachable, prohibit], description: "路由类型：黑洞/拒绝/不可达用于封网段" }
+        mtu: { type: integer, description: "路由 MTU（0=不设）" }
         remark: { type: string }
         enabled: { type: boolean }
         push_to_clients: { type: boolean }
@@ -1030,6 +1032,9 @@ components:
         min_cache_ttl: { type: integer }
         max_cache_ttl: { type: integer }
         force_proxy: { type: boolean }
+        dnssec: { type: boolean, description: "DNSSEC 校验" }
+        rebind_protection: { type: boolean, description: "防 DNS 重绑定" }
+        all_servers: { type: boolean, description: "并发查询所有上游" }
     DNSDoH:
       type: object
       properties:

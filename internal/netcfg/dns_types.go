@@ -8,16 +8,19 @@ const managedMarkerDNS = "kwrt-net-manager-dns"
 // DNSSettings 是全局 DNS 配置（单例，对应爱快 DNS 设置页上半部）。Enabled=false 时
 // applyDNS 不碰任何 stock 配置（部署默认态 = 零行为改动）。
 type DNSSettings struct {
-	Enabled      bool   `json:"enabled"`       // 是否由本工具托管 DNS 设置
-	DNSPrimary   string `json:"dns_primary"`   // 首选上游 DNS
-	DNSSecondary string `json:"dns_secondary"` // 备选上游 DNS
-	NoResolv     bool   `json:"no_resolv"`     // 仅用上面的上游，不读运营商下发（开前必须有可达上游）
-	FilterAAAA   bool   `json:"filter_aaaa"`   // 禁止 AAAA(IPv6) 解析
-	CacheSize    int    `json:"cache_size"`    // DNS 缓存大小（条；0=关闭缓存；<0 视为不设）
-	LocalTTL     int    `json:"local_ttl"`     // 本地记录 TTL（秒）
-	MinCacheTTL  int    `json:"min_cache_ttl"` // 最小缓存 TTL（秒，dnsmasq 默认上限 3600）
-	MaxCacheTTL  int    `json:"max_cache_ttl"` // 最大缓存 TTL（秒，dnsmasq 默认上限 3600）
-	ForceProxy   bool   `json:"force_proxy"`   // 强制客户端 DNS 代理（firewall 劫持 53 到本机）
+	Enabled       bool   `json:"enabled"`           // 是否由本工具托管 DNS 设置
+	DNSPrimary    string `json:"dns_primary"`       // 首选上游 DNS
+	DNSSecondary  string `json:"dns_secondary"`     // 备选上游 DNS
+	NoResolv      bool   `json:"no_resolv"`         // 仅用上面的上游，不读运营商下发（开前必须有可达上游）
+	FilterAAAA    bool   `json:"filter_aaaa"`       // 禁止 AAAA(IPv6) 解析
+	CacheSize     int    `json:"cache_size"`        // DNS 缓存大小（条；0=关闭缓存；<0 视为不设）
+	LocalTTL      int    `json:"local_ttl"`         // 本地记录 TTL（秒）
+	MinCacheTTL   int    `json:"min_cache_ttl"`     // 最小缓存 TTL（秒，dnsmasq 默认上限 3600）
+	MaxCacheTTL   int    `json:"max_cache_ttl"`     // 最大缓存 TTL（秒，dnsmasq 默认上限 3600）
+	ForceProxy    bool   `json:"force_proxy"`       // 强制客户端 DNS 代理（firewall 劫持 53 到本机）
+	DNSSEC        bool   `json:"dnssec"`            // 启用 DNSSEC 校验（防 DNS 投毒；dnsmasq 须编译支持）
+	RebindProtect bool   `json:"rebind_protection"` // 防 DNS 重绑定攻击（默认 stock 开）
+	AllServers    bool   `json:"all_servers"`       // 并发查询所有上游（最快者优先；关=按序）
 
 	// ---- 旁车内部簿记（不在 openapi/前端暴露，仅用于安全回滚 stock 段）----
 	SavedStock  map[string]string `json:"saved_stock,omitempty"`  // 改 @dnsmasq[0] 标量前的旧值快照

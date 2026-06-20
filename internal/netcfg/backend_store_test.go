@@ -99,7 +99,7 @@ func TestDHCPServerValidation(t *testing.T) {
 		{Interface: "", IPStart: "192.168.1.1", IPEnd: "192.168.1.9", Netmask: "255.255.255.0", LeaseMinutes: 1},
 		{Interface: "lan", IPStart: "x", IPEnd: "192.168.1.9", Netmask: "255.255.255.0", LeaseMinutes: 1},
 		{Interface: "lan", IPStart: "192.168.1.9", IPEnd: "192.168.1.1", Netmask: "255.255.255.0", LeaseMinutes: 1},
-		{Interface: "lan", IPStart: "192.168.1.1", IPEnd: "192.168.1.9", Netmask: "255.255.255.0", LeaseMinutes: 0},
+		{Interface: "lan", IPStart: "192.168.1.1", IPEnd: "192.168.1.9", Netmask: "255.255.255.0", LeaseMinutes: -1}, // 负=非法（0=永久合法）
 		{Interface: "lan", IPStart: "192.168.1.1", IPEnd: "192.168.1.9", Netmask: "bad", LeaseMinutes: 1},
 	}
 	for i, b := range bad {

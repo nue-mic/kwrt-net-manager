@@ -14,6 +14,9 @@ interface SettingsForm {
   aging: number; // 老化时间(秒) → 映射 local_ttl + min_cache_ttl
   cache_size: number;
   force_proxy: boolean;
+  dnssec: boolean;
+  rebind_protection: boolean;
+  all_servers: boolean;
 }
 
 interface DoHForm {
@@ -45,6 +48,9 @@ export default function DnsSettingsPage() {
         aging: s.min_cache_ttl || s.local_ttl || 0,
         cache_size: s.cache_size || 0,
         force_proxy: s.force_proxy,
+        dnssec: s.dnssec,
+        rebind_protection: s.rebind_protection,
+        all_servers: s.all_servers,
       });
       dForm.setFieldsValue({
         enabled: d.enabled,
@@ -77,6 +83,9 @@ export default function DnsSettingsPage() {
         min_cache_ttl: v.aging ?? 0,
         max_cache_ttl: 0,
         force_proxy: v.force_proxy,
+        dnssec: !!v.dnssec,
+        rebind_protection: !!v.rebind_protection,
+        all_servers: !!v.all_servers,
       });
       message.success('DNS 设置已保存');
       void load();
@@ -170,6 +179,30 @@ export default function DnsSettingsPage() {
             name="force_proxy"
             valuePropName="checked"
             extra="用防火墙把客户端 53 端口流量强制重定向到本机（仅拦 53，无法拦截客户端自带 DoH/443）。旁路由需谨慎。"
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
+            label="DNSSEC 校验"
+            name="dnssec"
+            valuePropName="checked"
+            extra="校验上游应答的真实性，防 DNS 投毒/劫持。开启会略增延迟，且上游需支持 DNSSEC。"
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
+            label="防 DNS 重绑定攻击"
+            name="rebind_protection"
+            valuePropName="checked"
+            extra="拦截「公网域名解析到内网 IP」的应答，防止恶意网站借此攻击内网设备。一般保持开启。"
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
+            label="并发查询所有上游"
+            name="all_servers"
+            valuePropName="checked"
+            extra="同时向所有上游 DNS 发起查询、最快者优先（更快但更耗资源）；关闭则按顺序使用。"
           >
             <Switch />
           </Form.Item>

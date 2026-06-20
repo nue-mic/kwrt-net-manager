@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { App, Button, Drawer, Form, Input, Popconfirm, Space, Switch, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Drawer, Form, Input, Popconfirm, Radio, Space, Switch, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined } from '@ant-design/icons';
 import PageCard from '../../components/PageCard';
@@ -8,11 +8,14 @@ import type { BatchAction } from '../../api/netcfg';
 import * as dns from '../../api/dns';
 
 interface RecordForm {
+  mode: 'resolve' | 'block';
   domain: string;
   address: string;
   wildcard: boolean;
   remark: string;
 }
+
+const isBlockAddr = (a: string) => a === '0.0.0.0' || a === '::';
 
 export default function DnsRecordsPage() {
   const { message } = App.useApp();
@@ -33,10 +36,16 @@ export default function DnsRecordsPage() {
   const openDrawer = (record?: dns.DNSRecord) => {
     setEditing(record ?? null);
     if (record) {
-      form.setFieldsValue({ domain: record.domain, address: record.address, wildcard: record.wildcard, remark: record.remark });
+      form.setFieldsValue({
+        mode: isBlockAddr(record.address) ? 'block' : 'resolve',
+        domain: record.domain,
+        address: record.address,
+        wildcard: record.wildcard,
+        remark: record.remark,
+      });
     } else {
       form.resetFields();
-      form.setFieldsValue({ wildcard: false });
+      form.setFieldsValue({ mode: 'resolve', wildcard: false });
     }
     setOpen(true);
   };
@@ -48,10 +57,11 @@ export default function DnsRecordsPage() {
     } catch {
       return;
     }
+    const isBlock = v.mode === 'block';
     const body: dns.DNSRecordInput = {
       domain: v.domain,
-      address: v.address,
-      wildcard: !!v.wildcard || v.domain.startsWith('*.'),
+      address: isBlock ? '0.0.0.0' : v.address, // 屏蔽=解析到 0.0.0.0
+      wildcard: isBlock ? true : !!v.wildcard || v.domain.startsWith('*.'),
       record_type: 'A', // 后端按地址族自动判定
       src_ip_scope: '',
       remark: v.remark ?? '',
@@ -100,8 +110,13 @@ export default function DnsRecordsPage() {
 
   const columns: ColumnsType<dns.DNSRecord> = [
     { title: '域名', dataIndex: 'domain' },
-    { title: '解析类型', dataIndex: 'record_type', width: 100, render: (v: string) => <Tag>{v}</Tag> },
-    { title: '解析地址', dataIndex: 'address' },
+    {
+      title: '解析类型',
+      dataIndex: 'record_type',
+      width: 100,
+      render: (v: string, r) => (isBlockAddr(r.address) ? <Tag color="red">屏蔽</Tag> : <Tag>{v}</Tag>),
+    },
+    { title: '解析地址', dataIndex: 'address', render: (v: string) => (isBlockAddr(v) ? <Typography.Text type="secondary">已屏蔽</Typography.Text> : v) },
     { title: '通配', dataIndex: 'wildcard', width: 80, render: (v: boolean) => (v ? <Tag color="blue">是</Tag> : <Tag>-</Tag>) },
     { title: '备注', dataIndex: 'remark', ellipsis: true, render: (v: string) => v || '-' },
     {
@@ -181,14 +196,35 @@ export default function DnsRecordsPage() {
         }
       >
         <Form form={form} layout="vertical">
+          <Form.Item name="mode" label="类型">
+            <Radio.Group optionType="button" buttonStyle="solid">
+              <Radio.Button value="resolve">解析到 IP</Radio.Button>
+              <Radio.Button value="block">屏蔽（拦截此域名）</Radio.Button>
+            </Radio.Group>
+          </Form.Item>
           <Form.Item name="domain" label="域名" rules={[{ required: true, message: '请输入域名' }]} extra="以 *. 开头表示通配（含所有子域）。">
             <Input placeholder="如 nas.lan 或 *.demo.lan" allowClear />
           </Form.Item>
-          <Form.Item name="address" label="解析地址" rules={[{ required: true, message: '请输入解析地址' }]} extra="IPv4 → A 记录；IPv6 → AAAA 记录（自动判定）。">
-            <Input placeholder="如 192.168.1.50" allowClear />
-          </Form.Item>
-          <Form.Item name="wildcard" label="通配（含子域）" valuePropName="checked" extra="勾选或域名以 *. 开头均视为通配。">
-            <Switch />
+          <Form.Item noStyle shouldUpdate={(p, c) => p.mode !== c.mode}>
+            {({ getFieldValue }) =>
+              getFieldValue('mode') === 'block' ? (
+                <Alert
+                  type="info"
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                  message="屏蔽后该域名（含所有子域）将被解析为 0.0.0.0 而无法访问——常用于广告 / 恶意域名拦截。"
+                />
+              ) : (
+                <>
+                  <Form.Item name="address" label="解析地址" rules={[{ required: true, message: '请输入解析地址' }]} extra="IPv4 → A 记录；IPv6 → AAAA 记录（自动判定）。">
+                    <Input placeholder="如 192.168.1.50" allowClear />
+                  </Form.Item>
+                  <Form.Item name="wildcard" label="通配（含子域）" valuePropName="checked" extra="勾选或域名以 *. 开头均视为通配。">
+                    <Switch />
+                  </Form.Item>
+                </>
+              )
+            }
           </Form.Item>
           <Form.Item name="remark" label="备注">
             <Input placeholder="可空" allowClear />

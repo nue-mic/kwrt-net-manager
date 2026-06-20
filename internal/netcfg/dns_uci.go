@@ -22,7 +22,7 @@ const (
 )
 
 // 本工具管理的 @dnsmasq[0] 标量（快照/回滚集合）。
-var dnsManagedScalars = []string{"filter_aaaa", "cachesize", "local_ttl", "min_cache_ttl", "max_cache_ttl", "noresolv", "resolvfile"}
+var dnsManagedScalars = []string{"filter_aaaa", "cachesize", "local_ttl", "min_cache_ttl", "max_cache_ttl", "noresolv", "resolvfile", "dnssec", "rebind_protection", "allservers"}
 
 // ---- write overrides：存旁车 → applyDNS ----
 
@@ -92,6 +92,10 @@ func (b *uciBackend) applyDNS() error {
 			setIntOrDel(&db, dnsmasqSec+".local_ttl", st.LocalTTL)
 			setIntOrDel(&db, dnsmasqSec+".min_cache_ttl", st.MinCacheTTL)
 			setIntOrDel(&db, dnsmasqSec+".max_cache_ttl", st.MaxCacheTTL)
+			// 安全/上游策略开关（值反射自当前 uci，故不会误关 stock 默认开的 rebind_protection）。
+			setBoolKV(&db, dnsmasqSec+".dnssec", st.DNSSEC)
+			setBoolKV(&db, dnsmasqSec+".rebind_protection", st.RebindProtect)
+			setBoolKV(&db, dnsmasqSec+".allservers", st.AllServers)
 		}
 		// noresolv：开 DoH（必须只走本地代理）或「仅用指定上游」时置 1；同时显式钉住 resolvfile
 		// 防止路由器自身 resolv 失管（#6597/#5838）。
@@ -281,6 +285,15 @@ func desiredDNSAddrs(records []DNSRecord) []string {
 		out = append(out, "/"+strings.TrimPrefix(r.Domain, "*.")+"/"+r.Address)
 	}
 	return out
+}
+
+// setBoolKV：布尔开关写成 uci 的 "1"/"0"。
+func setBoolKV(sb *strings.Builder, key string, on bool) {
+	if on {
+		setKV(sb, key, "1")
+	} else {
+		setKV(sb, key, "0")
+	}
 }
 
 // setIntOrDel：>0 则 set，否则 delete（用于 cachesize/ttl 这类 0=不设）。

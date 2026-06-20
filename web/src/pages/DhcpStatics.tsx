@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
+  Alert,
   App,
   Button,
   Checkbox,
@@ -336,6 +337,35 @@ export default function DhcpStaticsPage() {
             ]}
           >
             <Input placeholder="192.168.1.100" allowClear />
+          </Form.Item>
+          {/* IP 冲突提示：与其它静态分配重复，或当前被别的设备占用。 */}
+          <Form.Item noStyle shouldUpdate={(p, c) => p.ip !== c.ip || p.mac !== c.mac}>
+            {({ getFieldValue }) => {
+              const ip = String(getFieldValue('ip') ?? '').trim();
+              const mac = String(getFieldValue('mac') ?? '').trim().toUpperCase();
+              if (!ip) return null;
+              const dup = data.items.find((s) => s.ip === ip && s.id !== editing?.id);
+              if (dup)
+                return (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    style={{ marginBottom: 12 }}
+                    message={`该 IP 已被静态分配「${dup.hostname || dup.mac}」占用，请换一个`}
+                  />
+                );
+              const busy = leases.find((l) => l.ip === ip && !l.static && l.mac.toUpperCase() !== mac);
+              if (busy)
+                return (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    style={{ marginBottom: 12 }}
+                    message={`该 IP 当前被设备「${busy.hostname || busy.mac}」占用，绑定到本 MAC 可能冲突`}
+                  />
+                );
+              return null;
+            }}
           </Form.Item>
           <Form.Item
             name="mac"

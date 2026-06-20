@@ -1,0 +1,259 @@
+# OUI 厂商前缀库（MAC 前 3 字节 → 厂商名）。
+# 格式：每行 "PREFIX Vendor Name"；PREFIX 为 6 位大写十六进制（无分隔），其后为厂商名（可含空格）。
+# 以 # 开头的行为注释。
+# 这是 curated（精选）子集——覆盖虚拟化与常见消费/网络/IoT 厂商，未知前缀返回空字符串。
+# 可后续替换/追加为完整 IEEE MA-L 注册表（oui.txt 导出）。
+
+# ---- 虚拟化 / 容器（开发/测试环境高频） ----
+000C29 VMware
+005056 VMware
+000569 VMware
+001C14 VMware
+525400 QEMU/KVM
+080027 VirtualBox
+0A0027 VirtualBox
+00155D Microsoft Hyper-V
+00163E Xen
+021000 OpenVPN/TAP
+
+# ---- Apple ----
+3C0754 Apple
+A4B197 Apple
+DC2B2A Apple
+F0DBF8 Apple
+AC87A3 Apple
+F4F15A Apple
+001451 Apple
+0017F2 Apple
+F0766F Apple
+04F7E4 Apple
+7CD1C3 Apple
+8866A5 Apple
+A4D1D2 Apple
+D81D72 Apple
+
+# ---- 小米 Xiaomi ----
+286C07 Xiaomi
+64B473 Xiaomi
+78113C Xiaomi
+8CBEBE Xiaomi
+F8A45F Xiaomi
+50EC50 Xiaomi
+64CC2E Xiaomi
+7802F8 Xiaomi
+ACF7F3 Xiaomi
+F48B32 Xiaomi
+28E31F Xiaomi
+
+# ---- 华为 Huawei ----
+00259E Huawei
+0C96BF Huawei
+283152 Huawei
+48435A Huawei
+4C5499 Huawei
+781DBA Huawei
+80B686 Huawei
+ACE215 Huawei
+E0247F Huawei
+105172 Huawei
+240509 Huawei
+
+# ---- 三星 Samsung ----
+0021D1 Samsung
+8425DB Samsung
+8C71F8 Samsung
+BC851F Samsung
+C0BDD1 Samsung
+D0176A Samsung
+E8508B Samsung
+F409D8 Samsung
+0000F0 Samsung
+002566 Samsung
+
+# ---- TP-Link ----
+003192 TP-Link
+0C8063 TP-Link
+14CC20 TP-Link
+50C7BF TP-Link
+98DAC4 TP-Link
+A42BB0 TP-Link
+AC84C6 TP-Link
+C006C3 TP-Link
+EC086B TP-Link
+F4F26D TP-Link
+
+# ---- Espressif（ESP8266/ESP32，智能家居高频） ----
+240AC4 Espressif (ESP)
+3C71BF Espressif (ESP)
+483FDA Espressif (ESP)
+7C9EBD Espressif (ESP)
+8CAAB5 Espressif (ESP)
+A020A6 Espressif (ESP)
+B4E62D Espressif (ESP)
+CC50E3 Espressif (ESP)
+84CCA8 Espressif (ESP)
+DC4F22 Espressif (ESP)
+30AEA4 Espressif (ESP)
+
+# ---- Amazon（Echo/Fire 等） ----
+0C47C9 Amazon
+34D270 Amazon
+44650D Amazon
+68374A Amazon
+74C246 Amazon
+8871E5 Amazon
+F0D2F1 Amazon
+FC65DE Amazon
+AC63BE Amazon
+40B4CD Amazon
+
+# ---- Google / Nest ----
+001A11 Google
+3C5AB4 Google
+54607A Google
+A47733 Google
+F88FCA Google
+944479 Google
+F4F5D8 Google
+F4F5E8 Google
+1844F2 Google
+
+# ---- Sonos ----
+000E58 Sonos
+347E5C Sonos
+5CAAFD Sonos
+B8E937 Sonos
+949F3E Sonos
+48A6B8 Sonos
+
+# ---- 树莓派 Raspberry Pi ----
+B827EB Raspberry Pi
+DCA632 Raspberry Pi
+E45F01 Raspberry Pi
+28CDC1 Raspberry Pi
+D83ADD Raspberry Pi
+2CCF67 Raspberry Pi
+
+# ---- Intel（无线网卡多见） ----
+001B21 Intel
+00A0C9 Intel
+3C970E Intel
+7C7A91 Intel
+A0A8CD Intel
+AC7BA1 Intel
+E4A471 Intel
+3CA9F4 Intel
+9CB6D0 Intel
+
+# ---- Realtek ----
+00E04C Realtek
+52544C Realtek
+001E8C Realtek
+
+# ---- Ubiquiti ----
+002722 Ubiquiti
+0418D6 Ubiquiti
+24A43C Ubiquiti
+44D9E7 Ubiquiti
+687251 Ubiquiti
+74ACB9 Ubiquiti
+788A20 Ubiquiti
+B4FBE4 Ubiquiti
+DC9FDB Ubiquiti
+F09FC2 Ubiquiti
+FCECDA Ubiquiti
+
+# ---- MikroTik ----
+4C5E0C MikroTik
+6C3B6B MikroTik
+744D28 MikroTik
+64D154 MikroTik
+B869F4 MikroTik
+CC2DE0 MikroTik
+D4CA6D MikroTik
+E48D8C MikroTik
+18FD74 MikroTik
+
+# ---- Netgear ----
+000FB5 Netgear
+20E52A Netgear
+2C3033 Netgear
+6CB0CE Netgear
+A040A0 Netgear
+C03F0E Netgear
+E0469A Netgear
+E091F5 Netgear
+3894ED Netgear
+
+# ---- ASUS ----
+001731 ASUS
+04D9F5 ASUS
+1C872C ASUS
+2C56DC ASUS
+38D547 ASUS
+50465D ASUS
+AC220B ASUS
+B06EBF ASUS
+D850E6 ASUS
+F832E4 ASUS
+
+# ---- D-Link ----
+001346 D-Link
+14D64D D-Link
+1C7EE5 D-Link
+28107B D-Link
+5CD998 D-Link
+84C9B2 D-Link
+B8A386 D-Link
+CCB255 D-Link
+C8787D D-Link
+
+# ---- Sony ----
+0013A9 Sony
+00248D Sony
+104FA8 Sony
+30F9ED Sony
+5453ED Sony
+A0E453 Sony
+FCF152 Sony
+
+# ---- LG ----
+001C62 LG
+001E75 LG
+00E091 LG
+10683F LG
+344DF7 LG
+700514 LG
+A816B2 LG
+C4366C LG
+
+# ---- Dell ----
+001422 Dell
+00188B Dell
+14FEB5 Dell
+18A99B Dell
+B8AC6F Dell
+F8BC12 Dell
+D89EF3 Dell
+A41F72 Dell
+
+# ---- HP / HPE ----
+001321 HP
+001708 HP
+1CC1DE HP
+308D99 HP
+3863BB HP
+9457A5 HP
+A0481C HP
+EC8EB5 HP
+
+# ---- OPPO / vivo / OnePlus ----
+142D27 OPPO
+4C1A3D OPPO
+B017C2 OPPO
+0C1DAF vivo
+2C5D93 vivo
+BC9C31 vivo
+64A2F9 OnePlus
+94652D OnePlus
+C0EEFB OnePlus

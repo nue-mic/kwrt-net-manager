@@ -35,6 +35,7 @@ type Device struct {
 	Hostname string `json:"hostname,omitempty"`
 	IPv6     string `json:"ipv6,omitempty"`   // 选中的稳定 GUA（空=当前无可用全球地址）
 	Source   string `json:"source,omitempty"` // dhcpv6 | slaac | neighbor
+	Vendor   string `json:"vendor,omitempty"` // OUI 厂商识别
 }
 
 // v6cand 是一条 MAC→IPv6 候选（来自租约或邻居表）。
@@ -207,7 +208,7 @@ func listDevices(run Runner, leaseFile string) []Device {
 	out := make([]Device, 0, len(macs))
 	for m := range macs {
 		ip, src := pickStableGUA(m, cands)
-		out = append(out, Device{MAC: m, Hostname: hosts[m], IPv6: ip, Source: src})
+		out = append(out, Device{MAC: m, Hostname: hosts[m], IPv6: ip, Source: src, Vendor: netutil.Vendor(m)})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Hostname != out[j].Hostname {

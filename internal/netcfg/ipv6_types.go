@@ -109,6 +109,7 @@ type LeaseV6 struct {
 	ValidSeconds int64  `json:"valid_seconds"` // 有效时间（秒）
 	Static       bool   `json:"static"`        // 命中前缀静态分配
 	Remark       string `json:"remark"`
+	Vendor       string `json:"vendor,omitempty"` // OUI 厂商识别（只读，按 MAC 前缀查）
 }
 
 // PrefixStaticV6 是一条前缀静态分配（爱快「前缀静态分配」）。落到 odhcpd
@@ -151,6 +152,7 @@ type NeighborV6 struct {
 	State     string `json:"state"`  // REACHABLE | STALE | DELAY | PROBE | FAILED | PERMANENT | NOARP
 	Router    bool   `json:"router"` // 该邻居是路由器
 	Remark    string `json:"remark"`
+	Vendor    string `json:"vendor,omitempty"` // OUI 厂商识别（只读，按 MAC 前缀查）
 }
 
 // LineV6 是一条 IPv6 线路的实时统计（爱快「IPv6 线路详情」）。只读。

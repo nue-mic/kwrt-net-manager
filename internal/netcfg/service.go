@@ -486,6 +486,7 @@ func (s *Service) ListLeases(f LeaseFilter) ([]Lease, error) {
 	if err != nil {
 		return nil, err
 	}
+	notes, _ := s.be.LeaseNotes()
 	q := strings.ToLower(strings.TrimSpace(f.Query))
 	out := leases[:0:0]
 	for _, l := range leases {
@@ -497,6 +498,13 @@ func (s *Service) ListLeases(f LeaseFilter) ([]Lease, error) {
 		}
 		if f.Status == "dynamic" && l.Static {
 			continue
+		}
+		l.Vendor = netutil.Vendor(l.MAC)
+		// 动态租约：用旁车备注填充（静态租约的 Remark 来自保留项，不覆盖）。
+		if !l.Static {
+			if note, ok := notes[netutil.NormalizeMAC(l.MAC)]; ok {
+				l.Remark = note
+			}
 		}
 		if q != "" && !leaseMatches(l, q) {
 			continue
@@ -511,7 +519,8 @@ func leaseMatches(l Lease, q string) bool {
 	return strings.Contains(strings.ToLower(l.Hostname), q) ||
 		strings.Contains(strings.ToLower(l.IP), q) ||
 		strings.Contains(strings.ToLower(l.MAC), q) ||
-		strings.Contains(strings.ToLower(l.Remark), q)
+		strings.Contains(strings.ToLower(l.Remark), q) ||
+		strings.Contains(strings.ToLower(l.Vendor), q)
 }
 
 // ReserveLease promotes an active lease to a static reservation (iKuai 加入静态分配).
@@ -524,6 +533,19 @@ func (s *Service) ReserveLease(ip, mac, hostname, iface string) (StaticLease, er
 func (s *Service) BlacklistMAC(mac, remark string) (ACLEntry, error) {
 	e := ACLEntry{MAC: mac, Remark: remark, Enabled: true}
 	return s.AddACLEntry(e)
+}
+
+// SetLeaseNote 给某 MAC 的动态租约写/清备注（旁车元数据，不动 UCI）。空备注=清除。
+func (s *Service) SetLeaseNote(mac, note string) error {
+	nm := netutil.NormalizeMAC(mac)
+	if nm == "" {
+		return errors.New("无效的 MAC 地址")
+	}
+	if err := s.be.SetLeaseNote(nm, strings.TrimSpace(note)); err != nil {
+		return err
+	}
+	s.publish(eventbus.TypeStaticChanged, "update", 0)
+	return nil
 }
 
 // FixSubnet reserves every currently-dynamic lease on an interface (iKuai

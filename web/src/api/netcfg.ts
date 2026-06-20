@@ -53,6 +53,7 @@ export interface Lease {
   interface: string;
   static: boolean;
   remark: string;
+  vendor?: string; // OUI 厂商识别（只读）
 }
 
 export interface ACLEntry {
@@ -201,6 +202,9 @@ export async function listLeases(query: LeaseQuery = {}): Promise<Lease[]> {
 export async function reserveLease(body: { ip: string; mac: string; hostname: string; interface: string }): Promise<StaticLease> {
   const { data } = await client.post('/api/v1/dhcp/leases/reserve', body);
   return data;
+}
+export async function setLeaseNote(mac: string, remark: string): Promise<void> {
+  await client.put('/api/v1/dhcp/leases/note', { mac, remark });
 }
 export async function blacklistLease(body: { mac: string; remark: string }): Promise<ACLEntry> {
   const { data } = await client.post('/api/v1/dhcp/leases/blacklist', body);

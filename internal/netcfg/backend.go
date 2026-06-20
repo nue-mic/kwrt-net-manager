@@ -33,6 +33,9 @@ type Backend interface {
 
 	// Active leases (read-only).
 	Leases() ([]Lease, error)
+	// 动态租约备注（旁车元数据；MAC→备注，无 UCI 投射）。
+	LeaseNotes() (map[string]string, error)
+	SetLeaseNote(mac, note string) error
 
 	// MAC access-control list.
 	ACL() (ACL, error)

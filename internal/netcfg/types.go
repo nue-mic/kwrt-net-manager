@@ -73,6 +73,7 @@ type Lease struct {
 	Interface        string `json:"interface"`         // 绑定接口（按网段推断）
 	Static           bool   `json:"static"`            // 状态：true=静态分配 false=动态分配
 	Remark           string `json:"remark"`            // 命中保留时的备注
+	Vendor           string `json:"vendor,omitempty"`  // OUI 厂商识别（只读，按 MAC 前缀查）
 }
 
 // ACLEntry is one MAC entry in the DHCP black/white list.
@@ -181,6 +182,9 @@ type State struct {
 	DNSDoH          DNSDoH           `json:"dns_doh,omitempty"`
 	DNSRecords      []DNSRecord      `json:"dns_records,omitempty"`
 	DNSDomainRoutes []DNSDomainRoute `json:"dns_domain_routes,omitempty"`
+	// LeaseNotes 是动态租约的自定义备注（MAC→备注），纯旁车元数据，无 UCI 投射。
+	// 静态分配的备注走 StaticLease.Remark，不在此处。
+	LeaseNotes map[string]string `json:"lease_notes,omitempty"`
 }
 
 // CloneState returns a deep copy of s (slices are freshly allocated).
@@ -218,6 +222,7 @@ func CloneState(s State) State {
 	out.DNSDoH = s.DNSDoH
 	out.DNSRecords = append([]DNSRecord(nil), s.DNSRecords...)
 	out.DNSDomainRoutes = append([]DNSDomainRoute(nil), s.DNSDomainRoutes...)
+	out.LeaseNotes = cloneStrMap(s.LeaseNotes)
 	return out
 }
 

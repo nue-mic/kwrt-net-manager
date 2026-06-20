@@ -77,6 +77,7 @@ export interface LeaseV6 {
   valid_seconds: number;
   static: boolean;
   remark: string;
+  vendor?: string; // OUI 厂商识别（只读）
 }
 
 export interface PrefixStaticV6 {
@@ -116,6 +117,7 @@ export interface NeighborV6 {
   state: string;
   router: boolean;
   remark: string;
+  vendor?: string; // OUI 厂商识别（只读）
 }
 
 export interface LineV6 {

@@ -466,6 +466,23 @@ paths:
                 type: object
                 properties: { added: { type: integer } }
 
+  /api/v1/dhcp/leases/note:
+    put:
+      tags: [dhcp-lease]
+      summary: 给动态租约加/改/清备注（按 MAC；remark 空=清除）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mac]
+              properties:
+                mac: { type: string }
+                remark: { type: string }
+      responses:
+        "200": { description: OK }
+
   /api/v1/dhcp/acl:
     get:
       tags: [dhcp-acl]
@@ -908,6 +925,7 @@ components:
         interface: { type: string }
         static: { type: boolean }
         remark: { type: string }
+        vendor: { type: string, description: "OUI 厂商识别（只读，按 MAC 前缀查）" }
     ACLEntry:
       type: object
       properties:
@@ -1043,6 +1061,7 @@ components:
         hostname: { type: string }
         ipv6: { type: string, description: "当前解析到的稳定全球 IPv6（GUA），可空" }
         source: { type: string, enum: [dhcpv6, slaac, neighbor], description: "GUA 来源：DHCPv6 租约 / EUI-64 稳定 SLAAC / 邻居表" }
+        vendor: { type: string, description: "OUI 厂商识别" }
     SpeedtestStatus:
       type: object
       properties:

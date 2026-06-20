@@ -35,6 +35,7 @@ export interface DDNSDevice {
   hostname?: string;
   ipv6?: string; // 当前解析到的稳定 GUA，可空
   source?: 'dhcpv6' | 'slaac' | 'neighbor';
+  vendor?: string; // OUI 厂商识别
 }
 
 export type DDNSInput = Omit<DDNSEntry, 'id' | 'last_result' | 'current_ip' | 'last_update'>;

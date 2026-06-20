@@ -64,7 +64,7 @@ export default function DdnsListPage() {
     () =>
       devices.map((d) => ({
         value: d.mac,
-        label: `${d.hostname || '未知设备'} · ${d.mac}${d.ipv6 ? ` · ${d.ipv6}` : '（暂无 GUA）'}`,
+        label: `${d.hostname || '未知设备'}${d.vendor ? `（${d.vendor}）` : ''} · ${d.mac}${d.ipv6 ? ` · ${d.ipv6}` : '（暂无 GUA）'}`,
       })),
     [devices],
   );

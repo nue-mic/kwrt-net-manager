@@ -45,7 +45,7 @@ export default function DhcpLeasesPage() {
       if (status === 'static' && !l.static) return false;
       if (status === 'dynamic' && l.static) return false;
       if (kw) {
-        const hay = `${l.ip} ${l.mac} ${l.hostname} ${l.remark}`.toLowerCase();
+        const hay = `${l.ip} ${l.mac} ${l.hostname} ${l.remark} ${l.vendor ?? ''}`.toLowerCase();
         if (!hay.includes(kw)) return false;
       }
       return true;
@@ -80,6 +80,17 @@ export default function DhcpLeasesPage() {
     try {
       await blacklistOne(l);
       message.success(`已将 ${l.mac} 加入 MAC 黑名单`);
+      await reload();
+    } catch (e) {
+      message.error(extractErr(e));
+    }
+  }
+
+  // 行内：给动态租约保存/清除备注（旁车元数据）。
+  async function onSaveNote(l: net.Lease, remark: string) {
+    try {
+      await net.setLeaseNote(l.mac, remark.trim());
+      message.success(remark.trim() ? '备注已保存' : '备注已清除');
       await reload();
     } catch (e) {
       message.error(extractErr(e));
@@ -147,6 +158,13 @@ export default function DhcpLeasesPage() {
     { title: '终端 IP', dataIndex: 'ip', key: 'ip' },
     { title: '终端 MAC', dataIndex: 'mac', key: 'mac' },
     {
+      title: '厂商',
+      dataIndex: 'vendor',
+      key: 'vendor',
+      width: 130,
+      render: (v: string) => (v ? <Tag color="geekblue">{v}</Tag> : <Typography.Text type="secondary">未知</Typography.Text>),
+    },
+    {
       title: '有效时间',
       key: 'remaining',
       render: (_, r) =>
@@ -159,7 +177,23 @@ export default function DhcpLeasesPage() {
       render: (_, r) =>
         r.static ? <Tag color="success">静态分配</Tag> : <Tag color="processing">动态分配</Tag>,
     },
-    { title: '备注', dataIndex: 'remark', key: 'remark', render: (v: string) => v || '-' },
+    {
+      title: '备注',
+      dataIndex: 'remark',
+      key: 'remark',
+      render: (v: string, l) =>
+        l.static ? (
+          v || '-'
+        ) : (
+          <Typography.Text
+            editable={{ onChange: (val) => onSaveNote(l, val), tooltip: '点击编辑备注', maxLength: 64 }}
+            type={v ? undefined : 'secondary'}
+            style={{ marginInlineEnd: 0 }}
+          >
+            {v || '点击添加备注'}
+          </Typography.Text>
+        ),
+    },
     {
       title: '操作',
       key: 'actions',

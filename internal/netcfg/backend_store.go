@@ -86,6 +86,33 @@ func (b *storeBackend) flushLocked() error {
 	return os.Rename(tmp, b.path)
 }
 
+// ---- 动态租约备注（旁车元数据；uci 后端经嵌入复用） ----
+
+func (b *storeBackend) LeaseNotes() (map[string]string, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	out := make(map[string]string, len(b.st.LeaseNotes))
+	for k, v := range b.st.LeaseNotes {
+		out[k] = v
+	}
+	return out, nil
+}
+
+// SetLeaseNote 写入/清除某 MAC 的动态租约备注（note 为空=删除）。mac 应已归一化。
+func (b *storeBackend) SetLeaseNote(mac, note string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if note == "" {
+		delete(b.st.LeaseNotes, mac)
+	} else {
+		if b.st.LeaseNotes == nil {
+			b.st.LeaseNotes = map[string]string{}
+		}
+		b.st.LeaseNotes[mac] = note
+	}
+	return b.flushLocked()
+}
+
 // ---- interfaces / status ----
 
 func (b *storeBackend) Interfaces() ([]Interface, error) {

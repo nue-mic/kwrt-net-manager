@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/mia-clark/kwrt-net-manager/internal/eventbus"
+	"github.com/mia-clark/kwrt-net-manager/pkg/netutil"
 )
 
 // Service 的 IPv6 领域 API。沿用 IPv4 的 mutex+idFn+publish 模式：每个写操作
@@ -368,6 +369,7 @@ func (s *Service) ListLeasesV6(f LeaseFilter) ([]LeaseV6, error) {
 		if f.Interface != "" && l.Interface != f.Interface {
 			continue
 		}
+		l.Vendor = netutil.Vendor(l.MAC)
 		if q != "" && !leaseV6Matches(l, q) {
 			continue
 		}
@@ -381,7 +383,8 @@ func leaseV6Matches(l LeaseV6, q string) bool {
 		strings.Contains(strings.ToLower(l.MAC), q) ||
 		strings.Contains(strings.ToLower(l.IPv6Addr), q) ||
 		strings.Contains(strings.ToLower(l.LocalLink), q) ||
-		strings.Contains(strings.ToLower(l.DUID), q)
+		strings.Contains(strings.ToLower(l.DUID), q) ||
+		strings.Contains(strings.ToLower(l.Vendor), q)
 }
 
 // ================= 前缀静态分配 =================
@@ -618,7 +621,16 @@ func (s *Service) ToggleACLv6Entry(id string) (ACLv6Entry, error) {
 
 // ================= 邻居列表 / 线路详情 / 服务信息（只读 + 动作） =================
 
-func (s *Service) ListNeighborsV6() ([]NeighborV6, error) { return s.be.NeighborsV6() }
+func (s *Service) ListNeighborsV6() ([]NeighborV6, error) {
+	ns, err := s.be.NeighborsV6()
+	if err != nil {
+		return nil, err
+	}
+	for i := range ns {
+		ns[i].Vendor = netutil.Vendor(ns[i].MAC)
+	}
+	return ns, nil
+}
 
 func (s *Service) DeleteNeighborV6(addr, dev string) error {
 	if strings.TrimSpace(addr) == "" {

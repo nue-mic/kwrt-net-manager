@@ -62,6 +62,7 @@ func registerNetcfgRoutes(r chi.Router, d Deps) {
 	r.Post("/api/v1/dhcp/leases/reserve", h.ReserveLease)
 	r.Post("/api/v1/dhcp/leases/blacklist", h.BlacklistLease)
 	r.Post("/api/v1/dhcp/leases/fix-subnet", h.FixSubnet)
+	r.Put("/api/v1/dhcp/leases/note", h.SetLeaseNote)
 
 	// MAC access-control list.
 	r.Get("/api/v1/dhcp/acl", h.GetACL)

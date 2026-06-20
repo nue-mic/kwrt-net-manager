@@ -38,6 +38,7 @@ export default function Ipv6Leases() {
   const columns: ColumnsType<ipv6.LeaseV6> = [
     { title: '主机名', dataIndex: 'hostname', key: 'hostname', width: 160, render: (v: string) => <Text strong>{dash(v)}</Text> },
     { title: 'Mac', dataIndex: 'mac', key: 'mac', width: 160, render: (v: string) => dash(v) },
+    { title: '厂商', dataIndex: 'vendor', key: 'vendor', width: 120, render: (v: string) => (v ? <Tag color="geekblue">{v}</Tag> : <Text type="secondary">未知</Text>) },
     { title: '本地链接IPv6地址', dataIndex: 'local_link', key: 'local_link', width: 220, render: (v: string) => dash(v) },
     { title: '终端IPv6地址', dataIndex: 'ipv6_addr', key: 'ipv6_addr', width: 240, render: (v: string) => dash(v) },
     { title: 'DUID', dataIndex: 'duid', key: 'duid', width: 240, render: (v: string) => dash(v) },

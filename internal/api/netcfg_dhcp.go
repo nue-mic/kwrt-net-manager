@@ -283,6 +283,22 @@ func (h *NetcfgHandler) FixSubnet(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, map[string]any{"added": added})
 }
 
+// SetLeaseNote PUT /api/v1/dhcp/leases/note {mac,remark} — 给动态租约加/改/清备注。
+func (h *NetcfgHandler) SetLeaseNote(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		MAC    string `json:"mac"`
+		Remark string `json:"remark"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if err := h.svc.SetLeaseNote(body.MAC, body.Remark); err != nil {
+		h.writeNetErr(w, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 // ================= MAC ACL =================
 
 // GetACL GET /api/v1/dhcp/acl

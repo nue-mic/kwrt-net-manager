@@ -53,6 +53,13 @@ export default function Ipv6Neighbors() {
 
   const columns: ColumnsType<ipv6.NeighborV6> = [
     { title: '终端MAC', dataIndex: 'mac', key: 'mac', width: 200, render: (v: string) => v || '—' },
+    {
+      title: '厂商',
+      dataIndex: 'vendor',
+      key: 'vendor',
+      width: 130,
+      render: (v: string) => (v ? <Tag color="geekblue">{v}</Tag> : <Text type="secondary">未知</Text>),
+    },
     { title: 'IPv6地址', dataIndex: 'ipv6', key: 'ipv6', render: (v: string) => <Text copyable={!!v}>{v || '—'}</Text> },
     { title: '接口', dataIndex: 'interface', key: 'interface', width: 120, render: (v: string) => v || '—' },
     {

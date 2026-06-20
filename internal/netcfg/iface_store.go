@@ -102,6 +102,8 @@ func (b *storeBackend) NetIfaces() ([]NetIface, error) {
 	out := make([]NetIface, len(b.st.NetIfaces))
 	for i, x := range b.st.NetIfaces {
 		out[i] = cloneIface(x)
+		// 开发/模拟无真实 pending，按 Up 推导运行态（连接/未连接）。
+		out[i].Status = runtimeStatus(out[i].Up, false)
 	}
 	return out, nil
 }

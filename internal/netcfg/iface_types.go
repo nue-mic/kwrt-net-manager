@@ -133,8 +133,12 @@ type NetIface struct {
 	PPPoEv6    *bool  `json:"pppoe_ipv6,omitempty"` // PPPoE 上启用 IPv6（option ipv6 '1'）
 
 	// Runtime (read-only): is the interface up and what address it actually got.
+	// Status 比 Up 布尔更细：PPPoE 拨号 / DHCP 获取地址过程中 up 仍为 false 但 ubus 的
+	// pending 为 true，单凭 up 无法区分「拨号中」与「未连接」，故额外暴露 Status，
+	// 让前端能显示「拨号中…/获取地址中…」中间态。
 	Up        bool   `json:"up"`
 	RuntimeIP string `json:"runtime_ip"`
+	Status    string `json:"status"` // connected | connecting | disconnected
 }
 
 // IfaceAddr 是接口上的一个附加 IP。落地 OpenWrt `list ipaddr '<address>/<prefix>'`。
@@ -155,6 +159,25 @@ const (
 	ProtoDHCP   = "dhcp"
 	ProtoPPPoE  = "pppoe"
 )
+
+// NetIface.Status 运行态取值（比 Up 布尔更细，能表达「拨号中」）。
+const (
+	IfStatusConnected    = "connected"    // 已连接（ubus up=true）
+	IfStatusConnecting   = "connecting"   // 拨号中/获取地址中（up=false 但 pending=true）
+	IfStatusDisconnected = "disconnected" // 未连接
+)
+
+// runtimeStatus 把 ubus 的 up/pending 标志映射成粗粒度连接态。
+func runtimeStatus(up, pending bool) string {
+	switch {
+	case up:
+		return IfStatusConnected
+	case pending:
+		return IfStatusConnecting
+	default:
+		return IfStatusDisconnected
+	}
+}
 
 // DHCPSvcInfo describes which DHCP daemon is installed/running, powering the
 // 一键安装 dnsmasq flow when a box ships without dnsmasq (the preferred backend).

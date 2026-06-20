@@ -6,7 +6,7 @@ import {
 } from 'antd';
 import {
   GlobalOutlined, ApartmentOutlined, PlusOutlined, ReloadOutlined,
-  PoweroffOutlined, ThunderboltOutlined, DeleteOutlined, WifiOutlined,
+  PoweroffOutlined, ThunderboltOutlined, DeleteOutlined, WifiOutlined, SyncOutlined,
 } from '@ant-design/icons';
 import PageCard from '../components/PageCard';
 import { useNetData, extractErr } from '../hooks/useNetData';
@@ -176,9 +176,9 @@ export default function NetOverview() {
           <PortCard
             key={w.id}
             title={w.name}
-            sub={`${protoLabel(w.proto)}${w.up ? ' · 已连接' : ' · 未连接'}`}
+            sub={<>{protoLabel(w.proto)} · <ConnBadge iface={w} /></>}
             ips={ifaceIps(w, nics)}
-            color={w.up ? '#1f6fb2' : '#9ca3af'}
+            color={connColor(w, 'wan')}
             icon={<GlobalOutlined />}
             onClick={() => openEdit('wan', w)}
           />
@@ -190,9 +190,9 @@ export default function NetOverview() {
           <PortCard
             key={l.id}
             title={l.name}
-            sub={`${protoLabel(l.proto)}${l.up ? ' · 已连接' : ' · 未连接'}`}
+            sub={<>{protoLabel(l.proto)} · <ConnBadge iface={l} /></>}
             ips={ifaceIps(l, nics)}
-            color={l.up ? '#52c41a' : '#9ca3af'}
+            color={connColor(l, 'lan')}
             icon={<ApartmentOutlined />}
             onClick={() => openEdit('lan', l)}
           />
@@ -216,6 +216,53 @@ export default function NetOverview() {
 
 function protoLabel(p: string) {
   return p === 'pppoe' ? 'PPPoE 拨号' : p === 'static' ? '静态 IP' : 'DHCP 动态';
+}
+
+// 接入方式说明：切换模式时给一句人话提示。尤其 DHCP 选中后下方无字段，易被误以为没生效，
+// 一句话点明「无需填写」消除困惑。
+function protoHint(p?: string): string {
+  switch (p) {
+    case 'pppoe':
+      return 'PPPoE 宽带拨号：填运营商给的宽带账号 / 密码，保存后自动拨号上网（家庭光宽带最常见）。';
+    case 'static':
+      return '静态 IP：上级给了固定 IP 时使用，需手动填 IP / 子网掩码 / 网关 / DNS。';
+    default:
+      return 'DHCP 动态：自动从上级路由 / 光猫获取 IP，通常无需任何填写，保存即可。';
+  }
+}
+
+// 运行态 → 展示用 { 文案, 颜色, 是否转圈 }；拨号中 / 获取地址中按 proto 区分文案，
+// 让「拨号中」与「未连接」一眼可分。
+function connState(iface: net.NetIface): { text: string; color: string; spin: boolean } {
+  const st = iface.status ?? (iface.up ? 'connected' : 'disconnected');
+  if (st === 'connected') return { text: '已连接', color: 'success', spin: false };
+  if (st === 'connecting') {
+    const t = iface.proto === 'pppoe' ? '拨号中' : iface.proto === 'dhcp' ? '获取地址中' : '连接中';
+    return { text: t, color: 'processing', spin: true };
+  }
+  return { text: '未连接', color: 'default', spin: false };
+}
+
+// 卡片左边框颜色：拨号中=橙、已连接=角色色、未连接=灰。
+function connColor(iface: net.NetIface, role: 'wan' | 'lan'): string {
+  const st = iface.status ?? (iface.up ? 'connected' : 'disconnected');
+  if (st === 'connecting') return '#fa8c16';
+  if (st === 'connected') return role === 'wan' ? '#1f6fb2' : '#52c41a';
+  return '#9ca3af';
+}
+
+// 运行态徽标：asTag=true 渲染成 Tag（抽屉「运行状态」用），否则渲染成行内小字（卡片副标题用）。
+function ConnBadge({ iface, asTag }: { iface: net.NetIface; asTag?: boolean }) {
+  const s = connState(iface);
+  const icon = s.spin ? <SyncOutlined spin /> : undefined;
+  if (asTag) return <Tag color={s.color} icon={icon}>{s.text}</Tag>;
+  const c = s.color === 'success' ? '#52c41a' : s.color === 'processing' ? '#1677ff' : '#8c8c8c';
+  return (
+    <span style={{ color: c }}>
+      {s.spin && <SyncOutlined spin style={{ marginRight: 3 }} />}
+      {s.text}
+    </span>
+  );
 }
 
 // ifaceIps 汇总一个接口要显示的全部 IP：优先取该 device 网卡的真实内核地址（ip addr，
@@ -254,7 +301,7 @@ function PortGroup({ title, count, extra, children }: { title: string; count: nu
   );
 }
 
-function PortCard({ title, sub, color, icon, onClick, ips }: { title: string; sub: string; color: string; icon: React.ReactNode; onClick?: () => void; ips?: string[] }) {
+function PortCard({ title, sub, color, icon, onClick, ips }: { title: string; sub: React.ReactNode; color: string; icon: React.ReactNode; onClick?: () => void; ips?: string[] }) {
   return (
     <Card
       size="small"
@@ -477,13 +524,17 @@ function IfaceDrawer({ open, role, editing, live, nics, onClose, onSaved, onActi
         )}
 
         {role === 'wan' && (
-          <Form.Item label="接入方式" name="proto">
-            <Radio.Group optionType="button" buttonStyle="solid">
-              <Radio.Button value="dhcp">DHCP 动态</Radio.Button>
-              <Radio.Button value="pppoe">PPPoE 拨号</Radio.Button>
-              <Radio.Button value="static">静态 IP</Radio.Button>
-            </Radio.Group>
-          </Form.Item>
+          <>
+            <Form.Item label="接入方式" name="proto" style={{ marginBottom: 8 }}>
+              <Radio.Group optionType="button" buttonStyle="solid">
+                <Radio.Button value="dhcp">DHCP 动态</Radio.Button>
+                <Radio.Button value="pppoe">PPPoE 拨号</Radio.Button>
+                <Radio.Button value="static">静态 IP</Radio.Button>
+              </Radio.Group>
+            </Form.Item>
+            {/* 切换模式时的一句话说明：哪种模式该填什么，避免选了 DHCP 后下方空白的困惑 */}
+            <Alert type="info" showIcon banner style={{ marginBottom: 16, padding: '6px 12px' }} message={protoHint(proto)} />
+          </>
         )}
 
         {/* PPPoE */}
@@ -600,8 +651,9 @@ function IfaceDrawer({ open, role, editing, live, nics, onClose, onSaved, onActi
         {editing && role === 'wan' && (
           <Form.Item label="运行状态">
             <Space>
-              {/* 运行态取最新 live（断开/重拨/轮询后会刷新），回退到 editing 快照 */}
-              {(live?.up ?? editing.up) ? <Tag color="success">已连接</Tag> : <Tag>未连接</Tag>}
+              {/* 运行态取最新 live（断开/重拨/轮询后会刷新），回退到 editing 快照；
+                  三态：已连接 / 拨号中(获取地址中) / 未连接 */}
+              <ConnBadge iface={live ?? editing} asTag />
               {(live?.runtime_ip ?? editing.runtime_ip) && <Text>当前 IP：{live?.runtime_ip ?? editing.runtime_ip}</Text>}
             </Space>
           </Form.Item>

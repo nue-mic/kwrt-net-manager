@@ -564,3 +564,49 @@ func TestSaveNetIfacePPPoEv6Keepalive(t *testing.T) {
 		}
 	}
 }
+
+// 拨号中（pending）/已连接（up）/未连接 三态由 ubus 的 up+pending 推导，供前端区分
+// 「拨号中…」与「未连接」。
+func TestNetIfacesRuntimeStatus(t *testing.T) {
+	f := &fakeRunner{
+		show: map[string]string{"dhcp": "", "network": sampleNetIfaceShow},
+		cmd: map[string]string{
+			// wan 正在 PPPoE 拨号：up=false 但 pending=true → connecting
+			"ubus call network.interface.wan status": `{"up":false,"pending":true,"available":true,"autostart":true,"proto":"pppoe"}`,
+			// lan 已起：up=true → connected，并带运行 IP
+			"ubus call network.interface.lan status": `{"up":true,"pending":false,"ipv4-address":[{"address":"192.168.1.1"}]}`,
+		},
+	}
+	be := newTestUCI(t, f)
+	ifaces, err := be.NetIfaces()
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]NetIface{}
+	for _, x := range ifaces {
+		byID[x.ID] = x
+	}
+	if got := byID["wan"]; got.Status != IfStatusConnecting || got.Up {
+		t.Errorf("wan dialing: status=%q up=%v, want connecting/false", got.Status, got.Up)
+	}
+	if got := byID["lan"]; got.Status != IfStatusConnected || got.RuntimeIP != "192.168.1.1" {
+		t.Errorf("lan up: status=%q ip=%q, want connected/192.168.1.1", got.Status, got.RuntimeIP)
+	}
+}
+
+func TestRuntimeStatusMapping(t *testing.T) {
+	cases := []struct {
+		up, pending bool
+		want        string
+	}{
+		{true, false, IfStatusConnected},
+		{true, true, IfStatusConnected}, // up 优先于 pending
+		{false, true, IfStatusConnecting},
+		{false, false, IfStatusDisconnected},
+	}
+	for _, c := range cases {
+		if got := runtimeStatus(c.up, c.pending); got != c.want {
+			t.Errorf("runtimeStatus(up=%v,pending=%v)=%q want %q", c.up, c.pending, got, c.want)
+		}
+	}
+}

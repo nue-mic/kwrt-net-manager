@@ -296,6 +296,9 @@ func (b *uciBackend) NetIfaces() ([]NetIface, error) {
 		if st, ok := b.ifaceStatus(s.name); ok {
 			ni.Up = st.up
 			ni.RuntimeIP = st.ip
+			ni.Status = runtimeStatus(st.up, st.pending)
+		} else {
+			ni.Status = IfStatusDisconnected
 		}
 		mergeExtraRemarks(&ni, b.storeBackend)
 		out = append(out, ni)
@@ -310,8 +313,9 @@ func (b *uciBackend) NetIfaces() ([]NetIface, error) {
 }
 
 type ifStatus struct {
-	up bool
-	ip string
+	up      bool
+	pending bool // 连接建立中（PPPoE 拨号 / DHCP 获取地址）
+	ip      string
 }
 
 // ifaceStatus reads runtime state via ubus (best effort).
@@ -322,6 +326,7 @@ func (b *uciBackend) ifaceStatus(id string) (ifStatus, bool) {
 	}
 	var raw struct {
 		Up          bool `json:"up"`
+		Pending     bool `json:"pending"`
 		IPv4Address []struct {
 			Address string `json:"address"`
 		} `json:"ipv4-address"`
@@ -329,7 +334,7 @@ func (b *uciBackend) ifaceStatus(id string) (ifStatus, bool) {
 	if json.Unmarshal([]byte(out), &raw) != nil {
 		return ifStatus{}, false
 	}
-	st := ifStatus{up: raw.Up}
+	st := ifStatus{up: raw.Up, pending: raw.Pending}
 	if len(raw.IPv4Address) > 0 {
 		st.ip = raw.IPv4Address[0].Address
 	}

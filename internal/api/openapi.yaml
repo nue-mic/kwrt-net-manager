@@ -1268,6 +1268,7 @@ components:
         pppoe_ipv6: { type: boolean, nullable: true }
         up: { type: boolean, readOnly: true }
         runtime_ip: { type: string, readOnly: true }
+        status: { type: string, readOnly: true, enum: [connected, connecting, disconnected], description: "运行态：connected 已连接 / connecting 拨号中(获取地址中) / disconnected 未连接" }
     IfaceAddr:
       type: object
       properties:

@@ -379,8 +379,9 @@ export interface NetIface {
   pppoe_ipv6?: boolean | null;
   up: boolean;        // 只读运行态
   runtime_ip: string; // 只读运行 IP
+  status?: 'connected' | 'connecting' | 'disconnected'; // 只读：拨号中(connecting) 区别于未连接
 }
-export type NetIfaceInput = Omit<NetIface, 'up' | 'runtime_ip'>;
+export type NetIfaceInput = Omit<NetIface, 'up' | 'runtime_ip' | 'status'>;
 
 export interface NetOverview {
   wan_count: number;

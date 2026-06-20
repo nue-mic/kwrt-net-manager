@@ -47,11 +47,47 @@ type Runner interface {
 	Run(name string, args ...string) (string, error)
 }
 
+// StreamRunner 是 Runner 的可选能力：持续读取一个长驻命令(如 `logread -f`)的 stdout 行，
+// 用于「拨号实时日志」。返回的 channel 在进程退出或 ctx 取消时关闭。Runner 未实现它的后端
+// 不提供实时拨号流（仅快照）。
+type StreamRunner interface {
+	Stream(ctx context.Context, name string, args ...string) (<-chan string, error)
+}
+
 type execRunner struct{}
 
 func (execRunner) Run(name string, args ...string) (string, error) {
 	out, err := exec.Command(name, args...).CombinedOutput()
 	return string(out), err
+}
+
+// Stream 起一个长驻进程并把它的 stdout 按行投递到 channel。ctx 取消即 kill 进程
+// （exec.CommandContext 负责 SIGKILL，musl/busybox 下亦可靠）。binary 不存在时
+// Start 立即报错——非 OpenWrt(无 logread)由此自然走不通，调用方据此判定。
+func (execRunner) Stream(ctx context.Context, name string, args ...string) (<-chan string, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	ch := make(chan string, 64)
+	go func() {
+		defer close(ch)
+		sc := bufio.NewScanner(stdout)
+		sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
+		for sc.Scan() {
+			select {
+			case ch <- sc.Text():
+			case <-ctx.Done():
+				return
+			}
+		}
+		_ = cmd.Wait()
+	}()
+	return ch, nil
 }
 
 // Entry 是统一日志行；不同源按需填充对应字段（前端按源渲染列）。
@@ -69,6 +105,14 @@ type Entry struct {
 	ClientIP string `json:"client_ip,omitempty"` // operation：客户端 IP
 	Module   string `json:"module,omitempty"`    // operation：功能模块
 	Action   string `json:"action,omitempty"`    // operation：动作
+
+	// 拨号诊断（仅 dialup 源 / 实时拨号流富化；其余源为空，omitempty 不影响）。
+	Phase     string `json:"phase,omitempty"`      // discovery|auth|ipcp|established|teardown|other
+	DialState string `json:"dial_state,omitempty"` // connecting|connected|failed（与接口三态语义一致）
+	Severity  string `json:"severity,omitempty"`   // info|success|warning|error
+	Diagnosis string `json:"diagnosis,omitempty"`  // 中文诊断（命中模式表才有）
+	Advice    string `json:"advice,omitempty"`     // 中文处置建议
+	Seq       uint64 `json:"seq,omitempty"`         // 实时流内单调序号，前端去重/续传
 }
 
 // Filter 是查询过滤条件。
@@ -88,12 +132,14 @@ type Result struct {
 
 // Center 是日志中心。
 type Center struct {
-	run     Runner
-	dir     string // DATA_DIR/logs
-	log     *slog.Logger
-	loc     *time.Location // 机器本地时区（守护进程常跑在 UTC，须按系统时区显示/换算）
-	mu      sync.Mutex
-	arpSeen map[string]string // ip -> last mac（ARP 差分基线）
+	run      Runner
+	dir      string // DATA_DIR/logs
+	log      *slog.Logger
+	loc      *time.Location // 机器本地时区（守护进程常跑在 UTC，须按系统时区显示/换算）
+	mu       sync.Mutex
+	arpSeen  map[string]string // ip -> last mac（ARP 差分基线）
+	simulate bool              // true=拨号流推送脚本化模拟序列（非 OpenWrt/store 后端演示用）
+	dial     *dialStream       // 拨号实时日志：单例 logread -f + 环形缓冲 + 多订阅广播
 }
 
 // New 构造 Center。dataDir 为数据根目录（自管日志落 dataDir/logs）。
@@ -103,9 +149,14 @@ func New(dataDir string, log *slog.Logger) *Center {
 	}
 	c := &Center{run: execRunner{}, dir: filepath.Join(dataDir, "logs"), log: log, arpSeen: map[string]string{}}
 	c.loc = detectLoc(c.run)
+	c.dial = newDialStream(c)
 	_ = os.MkdirAll(c.dir, 0o755)
 	return c
 }
+
+// SetSimulate 开/关拨号流模拟。守护进程在 netcfg 后端为 store(非 OpenWrt)时置 true，
+// 让 Windows/CI 也能演示「拨号实时日志 + 诊断」整条链路。
+func (c *Center) SetSimulate(b bool) { c.simulate = b }
 
 // detectLoc 用 `date +%z` 取系统当前 UTC 偏移，构造固定时区。失败回退 time.Local。
 // 目的：logread 打印的是系统本地时间，而守护进程多跑在 UTC——统一按系统时区解析/落盘，

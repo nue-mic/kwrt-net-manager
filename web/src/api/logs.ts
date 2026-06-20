@@ -4,6 +4,9 @@ import client, { getAPIToken } from './client';
 
 export type LogSource = 'system' | 'dhcp' | 'dialup' | 'ddns' | 'operation' | 'arp';
 
+export type DialPhase = 'discovery' | 'auth' | 'ipcp' | 'established' | 'teardown' | 'other';
+export type DialSeverity = 'info' | 'success' | 'warning' | 'error';
+
 export interface LogEntry {
   time: string;
   ts: number;
@@ -18,6 +21,34 @@ export interface LogEntry {
   client_ip?: string;
   module?: string;
   action?: string;
+  // 拨号诊断（仅 dialup 源 / 实时拨号流）
+  phase?: DialPhase;
+  dial_state?: 'connecting' | 'connected' | 'failed';
+  severity?: DialSeverity;
+  diagnosis?: string;
+  advice?: string;
+  seq?: number;
+}
+
+// 拨号结论横幅（GET /api/v1/logs/dialup/diagnose）。
+export interface DialDiagnosis {
+  iface?: string;
+  dial_state: 'connecting' | 'connected' | 'failed' | 'unknown';
+  phase?: string;
+  severity?: DialSeverity;
+  headline: string;
+  diagnosis?: string;
+  advice?: string;
+  matched_line?: string;
+  updated_at?: string;
+}
+
+// 实时拨号日志 WS 帧。
+export interface DialLogFrame {
+  seq: number;
+  type: string; // "dial.log"
+  ts: string;
+  data: LogEntry;
 }
 
 export interface LogQuery {
@@ -40,6 +71,25 @@ export async function queryLogs(source: LogSource, q: LogQuery): Promise<LogResu
 
 export async function clearLogs(source: LogSource): Promise<void> {
   await client.post(`/api/v1/logs/${source}/clear`);
+}
+
+// 拨号诊断结论（打开拨号日志时先取一次，给横幅一个即时结论）。
+export async function dialDiagnose(iface?: string): Promise<DialDiagnosis> {
+  const { data } = await client.get('/api/v1/logs/dialup/diagnose', {
+    params: iface ? { iface } : {},
+  });
+  return data as DialDiagnosis;
+}
+
+// 构造拨号实时日志 WebSocket URL（token 走 query，浏览器 WS 无法设 header）。
+export function dialStreamWsURL(iface?: string, replay = 80): string {
+  const token = getAPIToken();
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const p = new URLSearchParams();
+  if (token) p.set('token', token);
+  if (iface) p.set('iface', iface);
+  if (replay > 0) p.set('replay', String(replay));
+  return `${proto}//${window.location.host}/api/v1/logs/dialup/stream?${p.toString()}`;
 }
 
 // 导出：带鉴权直接下载为文本文件。

@@ -120,6 +120,8 @@ func runServe(args []string) int {
 
 	// 日志中心：系统/DHCP/拨号/DDNS 日志 + 本工具审计 + ARP 差分监控。
 	logs := logcenter.New(cfg.DataDir, logger)
+	// store 后端(非 OpenWrt)无 logread → 拨号实时流推送脚本化模拟序列，便于 Windows/CI 演示。
+	logs.SetSimulate(nbe.Kind() == "store")
 	arpCtx, arpCancel := context.WithCancel(context.Background())
 	defer arpCancel()
 	logs.StartARPMonitor(arpCtx, 20*time.Second)

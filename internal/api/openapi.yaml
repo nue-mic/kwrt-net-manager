@@ -763,6 +763,32 @@ paths:
                 properties:
                   total: { type: integer }
                   items: { type: array, items: { $ref: "#/components/schemas/LogEntry" } }
+  /api/v1/logs/dialup/diagnose:
+    get:
+      tags: [logs]
+      summary: 拨号诊断结论（最近一次拨号的状态/原因/建议横幅）
+      parameters:
+        - { name: iface, in: query, schema: { type: string }, description: 可选，按接口名过滤 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DialDiagnosis" }
+  /api/v1/logs/dialup/stream:
+    get:
+      tags: [logs]
+      summary: 拨号实时日志（WebSocket，单例 logread -f 广播；store 后端推送模拟序列）
+      description: >
+        WebSocket 端点。鉴权用 ?token=（浏览器 WS 无法设 header）。可选 ?iface= 过滤、
+        ?replay=N 连上回放最近 N 条（默认 50）。每帧形如
+        {seq,type:"dial.log",ts,data:LogEntry}，data 已富化 phase/dial_state/severity/diagnosis/advice。
+      parameters:
+        - { name: token, in: query, schema: { type: string }, description: Bearer 令牌（WS 鉴权） }
+        - { name: iface, in: query, schema: { type: string } }
+        - { name: replay, in: query, schema: { type: integer, default: 50 } }
+      responses:
+        "101": { description: Switching Protocols (WebSocket) }
   /api/v1/logs/{source}/export:
     get:
       tags: [logs]
@@ -1158,6 +1184,26 @@ components:
         client_ip: { type: string }
         module: { type: string }
         action: { type: string }
+        # 拨号诊断（仅 dialup 源 / 实时拨号流富化）
+        phase: { type: string, enum: [discovery, auth, ipcp, established, teardown, other], description: 拨号阶段 }
+        dial_state: { type: string, enum: [connecting, connected, failed], description: 拨号状态 }
+        severity: { type: string, enum: [info, success, warning, error] }
+        diagnosis: { type: string, description: 中文诊断（命中模式表才有） }
+        advice: { type: string, description: 中文处置建议 }
+        seq: { type: integer, description: 实时流内单调序号 }
+    DialDiagnosis:
+      type: object
+      description: 拨号结论横幅（GET /api/v1/logs/dialup/diagnose）
+      properties:
+        iface: { type: string }
+        dial_state: { type: string, enum: [connecting, connected, failed, unknown] }
+        phase: { type: string }
+        severity: { type: string, enum: [info, success, warning, error] }
+        headline: { type: string, description: 一句话结论 }
+        diagnosis: { type: string }
+        advice: { type: string }
+        matched_line: { type: string, description: 命中诊断的原始日志行 }
+        updated_at: { type: string }
     DDNSEntry:
       type: object
       properties:

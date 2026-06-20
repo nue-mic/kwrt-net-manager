@@ -37,6 +37,7 @@ func (c *Center) readSyslog(source string) []Entry {
 			if !isDialupLine(e) {
 				continue
 			}
+			enrichDial(&e) // 富化诊断 + 接口名，让历史查询/导出也带「拨号状态/原因/建议」
 		}
 		res = append(res, e)
 	}

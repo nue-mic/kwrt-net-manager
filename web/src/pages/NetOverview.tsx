@@ -7,8 +7,10 @@ import {
 import {
   GlobalOutlined, ApartmentOutlined, PlusOutlined, ReloadOutlined,
   PoweroffOutlined, ThunderboltOutlined, DeleteOutlined, WifiOutlined, SyncOutlined,
+  FileSearchOutlined,
 } from '@ant-design/icons';
 import PageCard from '../components/PageCard';
+import DialLogConsole from '../components/DialLogConsole';
 import { useNetData, extractErr } from '../hooks/useNetData';
 import * as net from '../api/netcfg';
 
@@ -341,6 +343,7 @@ function IfaceDrawer({ open, role, editing, live, nics, onClose, onSaved, onActi
   const navigate = useNavigate();
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
+  const [dialOpen, setDialOpen] = useState(false); // 拨号日志 Modal
   const proto = Form.useWatch('proto', form) as string | undefined;
 
   // 可绑定的物理网卡：空闲 + 当前接口已绑定的
@@ -650,11 +653,14 @@ function IfaceDrawer({ open, role, editing, live, nics, onClose, onSaved, onActi
 
         {editing && role === 'wan' && (
           <Form.Item label="运行状态">
-            <Space>
+            <Space wrap>
               {/* 运行态取最新 live（断开/重拨/轮询后会刷新），回退到 editing 快照；
                   三态：已连接 / 拨号中(获取地址中) / 未连接 */}
               <ConnBadge iface={live ?? editing} asTag />
               {(live?.runtime_ip ?? editing.runtime_ip) && <Text>当前 IP：{live?.runtime_ip ?? editing.runtime_ip}</Text>}
+              <Button size="small" type="link" icon={<FileSearchOutlined />} onClick={() => setDialOpen(true)} style={{ paddingInline: 0 }}>
+                查看拨号日志
+              </Button>
             </Space>
           </Form.Item>
         )}
@@ -699,6 +705,21 @@ function IfaceDrawer({ open, role, editing, live, nics, onClose, onSaved, onActi
           </Tooltip>
         </Paragraph>
       </Form>
+
+      {/* 拨号实时日志：把 pppd 报错翻成人话+建议，点「重拨」后可立刻看拨号过程与失败原因 */}
+      {editing && role === 'wan' && (
+        <Modal
+          title={`拨号日志 · ${editing.name}`}
+          open={dialOpen}
+          onCancel={() => setDialOpen(false)}
+          footer={null}
+          width="min(94vw, 860px)"
+          styles={{ body: { height: '62vh' } }}
+          destroyOnHidden
+        >
+          <DialLogConsole iface={editing.id} />
+        </Modal>
+      )}
     </Drawer>
   );
 }

@@ -74,6 +74,7 @@ func NewRouter(d Deps) http.Handler {
 	r.Get("/api/docs/openapi.json", docs.SpecJSON)
 
 	events := NewEventsHandler(d.Bus, d.Logger, rc.EffectiveCORS)
+	dialStream := NewDialStreamHandler(d.Logs, d.Logger, rc.EffectiveCORS)
 	upd := NewUpdateHandler(d.Cfg.DataDir, rc.SelfUpdateEnabled, d.Logger)
 	syscfg := NewSysConfigHandler(rc, d.Logger)
 	bkp := NewBackupHandler(d.Store, d.Backup, d.Export.RestoreFromZipBytes, d.Logger)
@@ -132,6 +133,12 @@ func NewRouter(d Deps) http.Handler {
 
 		// Log center (系统/DHCP/拨号/DDNS/操作/ARP 日志).
 		registerLogRoutes(r, d.Logs)
+
+		// 拨号实时日志（WebSocket）+ 拨号诊断结论。静态路径，与 /logs/{source} 不冲突。
+		if d.Logs != nil {
+			r.Get("/api/v1/logs/dialup/stream", dialStream.Stream)
+			r.Get("/api/v1/logs/dialup/diagnose", dialStream.Diagnose)
+		}
 
 		// 动态域名 DDNS（ddns-scripts）.
 		registerDDNSRoutes(r, d.DDNS)

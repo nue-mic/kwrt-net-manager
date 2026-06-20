@@ -42,6 +42,7 @@ export default function DhcpStaticsPage() {
   );
   const { data: ifaces } = useNetData<net.NetInterface[]>(() => net.listInterfaces(), []);
   const { data: leases } = useNetData<net.Lease[]>(() => net.listLeases(), []);
+  const { data: servers } = useNetData<net.DHCPServer[]>(() => net.listServers(), []);
 
   const [searchParams] = useSearchParams();
   const [selected, setSelected] = useState<string[]>([]);
@@ -80,7 +81,22 @@ export default function DhcpStaticsPage() {
   // 选一台在线终端：自动带出 IP / MAC / 主机名 / 接口（仍可手改）。
   const onPickDevice = (mac?: string) => {
     const l = leases.find((x) => x.mac === mac);
-    if (l) form.setFieldsValue({ hostname: l.hostname, ip: l.ip, mac: l.mac, interface: l.interface });
+    if (l) {
+      form.setFieldsValue({ hostname: l.hostname, ip: l.ip, mac: l.mac, interface: l.interface });
+      fillFromServer(l.interface);
+    }
+  };
+
+  // 选接口后：网关/DNS 为空时，自动带该接口 DHCP 服务端的网关/DNS（仍可手改）。
+  const fillFromServer = (iface?: string) => {
+    const srv = servers.find((s) => s.interface === iface);
+    if (!srv) return;
+    const cur = form.getFieldsValue();
+    const patch: Partial<StaticForm> = {};
+    if (!cur.gateway && srv.gateway) patch.gateway = srv.gateway;
+    if (!cur.dns_primary && srv.dns_primary) patch.dns_primary = srv.dns_primary;
+    if (!cur.dns_secondary && srv.dns_secondary) patch.dns_secondary = srv.dns_secondary;
+    if (Object.keys(patch).length) form.setFieldsValue(patch);
   };
 
   const onToggleArpBind = async (e: CheckboxChangeEvent) => {
@@ -335,7 +351,7 @@ export default function DhcpStaticsPage() {
             <Input placeholder="可空" allowClear />
           </Form.Item>
           <Form.Item name="interface" label="绑定接口">
-            <Select allowClear placeholder="选择接口" options={ifaceOptions} />
+            <Select allowClear placeholder="选择接口" options={ifaceOptions} onChange={(v) => fillFromServer(v)} />
           </Form.Item>
           <Form.Item name="dns_primary" label="首选DNS">
             <Input placeholder="可空" allowClear />

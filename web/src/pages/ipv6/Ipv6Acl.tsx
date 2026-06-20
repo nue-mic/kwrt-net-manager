@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Alert, App, Button, Drawer, Form, Input, Popconfirm, Radio, Space, Switch, Table, Tag, Typography } from 'antd';
+import { useMemo, useState } from 'react';
+import { Alert, App, AutoComplete, Button, Drawer, Form, Input, Popconfirm, Radio, Space, Switch, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined } from '@ant-design/icons';
 import PageCard from '../../components/PageCard';
@@ -27,10 +27,28 @@ export default function Ipv6Acl() {
     () => ipv6.getACLv6(),
     { mode: 'blacklist', entries: [] } as ipv6.ACLv6,
   );
+  const { data: leasesV6 } = useNetData<ipv6.LeaseV6[]>(() => ipv6.listLeasesV6(), []);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ipv6.ACLv6Entry | null>(null);
   const [form] = Form.useForm<Aclv6Form>();
   const watchMethod = Form.useWatch('method', form) as ipv6.ACLv6Method | undefined;
+
+  // DHCPv6 终端 → DUID 选择器（仅有 DUID 的条目；保留手输）。
+  const duidOptions = useMemo(
+    () =>
+      leasesV6
+        .filter((l) => l.duid)
+        .map((l) => ({
+          value: l.duid,
+          label: `${l.hostname || '未知设备'}${l.vendor ? `（${l.vendor}）` : ''} · ${l.duid}`,
+        })),
+    [leasesV6],
+  );
+  // 选中终端：备注为空时自动带主机名。
+  const onPickDuid = (duid: string) => {
+    const l = leasesV6.find((x) => x.duid === duid);
+    if (l?.hostname && !form.getFieldValue('remark')) form.setFieldsValue({ remark: l.hostname });
+  };
 
   const openDrawer = (record?: ipv6.ACLv6Entry) => {
     setEditing(record ?? null);
@@ -233,10 +251,17 @@ export default function Ipv6Acl() {
             <Form.Item
               label="DUID"
               name="duid"
-              tooltip="终端的 DHCPv6 唯一标识，可从「DHCPv6 终端」列表获取"
+              tooltip="终端的 DHCPv6 唯一标识"
+              extra="可从在线 DHCPv6 终端下拉选，或手输 DUID。"
               rules={[{ required: true, message: '请输入 DUID' }]}
             >
-              <Input placeholder="如 00:01:00:01:2c:3a:..." />
+              <AutoComplete
+                options={duidOptions}
+                placeholder="选择在线 DHCPv6 终端或手输 DUID"
+                onSelect={onPickDuid}
+                filterOption={(input, option) => String(option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
+                allowClear
+              />
             </Form.Item>
           )}
           {watchMethod === 'l2mac' && (

@@ -87,7 +87,9 @@ func runServe(args []string) int {
 	// system-config UI (KWRTNET_LOG_LEVEL is the boot default).
 	levelVar := new(slog.LevelVar)
 	levelVar.Set(appcfg.ParseLevel(cfg.LogLevel))
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: levelVar}))
+	// 按级别分流：INFO/DEBUG→stdout、WARN/ERROR→stderr。procd 据此把正常日志标 daemon.info、
+	// 告警/错误标 daemon.err，logread 的 severity 才与日志级别一致（不再把 200 访问日志当 err）。
+	logger := slog.New(appcfg.NewLogHandler(&slog.HandlerOptions{Level: levelVar}))
 	if cfg.HTTPAddrWarn != "" {
 		logger.Warn("listen addr normalize", slog.String("detail", cfg.HTTPAddrWarn))
 	}

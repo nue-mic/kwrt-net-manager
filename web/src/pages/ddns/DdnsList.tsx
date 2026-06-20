@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, App, Button, Drawer, Form, Input, Popconfirm, Select, Space, Table, Tag, Tooltip, Typography } from 'antd';
+import { Alert, App, AutoComplete, Button, Drawer, Form, Input, Popconfirm, Select, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import PageCard from '../../components/PageCard';
@@ -13,8 +13,9 @@ interface DdnsForm {
   auth_mode: 'token' | 'userpass';
   username: string;
   password: string;
-  ip_source: 'web' | 'network';
+  ip_source: 'web' | 'network' | 'device';
   interface: string;
+  mac: string;
   record_type: 'A' | 'AAAA';
   remark: string;
 }
@@ -31,6 +32,7 @@ export default function DdnsListPage() {
   const { message } = App.useApp();
   const { data, loading, reload } = useNetData<ddns.DDNSEntry[]>(() => ddns.listDDNS(), []);
   const [svc, setSvc] = useState<ddns.DDNSSvcInfo | null>(null);
+  const [devices, setDevices] = useState<ddns.DDNSDevice[]>([]);
   const [installing, setInstalling] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [keyword, setKeyword] = useState('');
@@ -46,9 +48,26 @@ export default function DdnsListPage() {
       /* 忽略 */
     }
   };
+  const loadDevices = async () => {
+    try {
+      setDevices(await ddns.listDDNSDevices());
+    } catch {
+      /* 忽略：非 OpenWrt 环境无设备 */
+    }
+  };
   useEffect(() => {
     void loadSvc();
   }, []);
+
+  // 设备下拉：主机名 / MAC / 当前 GUA 供搜索，value 取 MAC。
+  const deviceOptions = useMemo(
+    () =>
+      devices.map((d) => ({
+        value: d.mac,
+        label: `${d.hostname || '未知设备'} · ${d.mac}${d.ipv6 ? ` · ${d.ipv6}` : '（暂无 GUA）'}`,
+      })),
+    [devices],
+  );
 
   const filtered = useMemo(() => {
     const kw = keyword.trim().toLowerCase();
@@ -58,11 +77,12 @@ export default function DdnsListPage() {
 
   const openDrawer = (record?: ddns.DDNSEntry) => {
     setEditing(record ?? null);
+    void loadDevices();
     if (record) {
       form.setFieldsValue({ ...record });
     } else {
       form.resetFields();
-      form.setFieldsValue({ auth_mode: 'token', ip_source: 'web', record_type: 'A', interface: 'wan', provider: svc?.providers?.[0] });
+      form.setFieldsValue({ auth_mode: 'token', ip_source: 'web', record_type: 'A', interface: 'wan', mac: '', provider: svc?.providers?.[0] });
     }
     setOpen(true);
   };
@@ -74,6 +94,7 @@ export default function DdnsListPage() {
     } catch {
       return;
     }
+    const isDevice = v.ip_source === 'device';
     const body: ddns.DDNSInput = {
       provider: v.provider,
       domain: v.domain,
@@ -81,8 +102,9 @@ export default function DdnsListPage() {
       username: v.username ?? '',
       password: v.password ?? '',
       ip_source: v.ip_source,
-      interface: v.interface ?? 'wan',
-      record_type: v.record_type,
+      interface: isDevice ? 'lan' : v.interface ?? 'wan',
+      mac: isDevice ? (v.mac ?? '').trim() : '',
+      record_type: isDevice ? 'AAAA' : v.record_type, // device 仅支持 IPv6
       enabled: editing ? editing.enabled : true,
       remark: v.remark ?? '',
     };
@@ -143,7 +165,21 @@ export default function DdnsListPage() {
   const columns: ColumnsType<ddns.DDNSEntry> = [
     { title: '服务商', dataIndex: 'provider', width: 140 },
     { title: '域名', dataIndex: 'domain' },
-    { title: '解析方式', dataIndex: 'ip_source', width: 120, render: (v: string) => (v === 'network' ? '接口IP' : '互联网出口IP') },
+    {
+      title: '解析方式',
+      dataIndex: 'ip_source',
+      width: 130,
+      render: (v: string, r) =>
+        v === 'device' ? (
+          <Tooltip title={`目标终端 ${r.mac || ''}`}>
+            <Tag color="purple">终端解析</Tag>
+          </Tooltip>
+        ) : v === 'network' ? (
+          '接口IP'
+        ) : (
+          '互联网出口IP'
+        ),
+    },
     { title: '记录类型', dataIndex: 'record_type', width: 100, render: (v: string) => <Tag>{v}</Tag> },
     { title: '更新结果', dataIndex: 'last_result', width: 100, render: (v: string) => resultTag(v) },
     { title: 'IP地址', dataIndex: 'current_ip', width: 200, render: (v: string) => v || '--' },
@@ -205,10 +241,10 @@ export default function DdnsListPage() {
         />
       )}
       <Alert
-        type="warning"
+        type="info"
         showIcon
         style={{ marginBottom: 12 }}
-        message="OpenWrt 原生 ddns-scripts 只支持把「本机外网出口 IP / 指定接口 IP」更新到域名；爱快的「按终端 MAC 解析某 LAN 设备 IP」无原生能力，未迁移。"
+        message="解析方式：互联网出口 IP / 接口 IP 走 OpenWrt 原生 ddns-scripts；「按终端解析」由 kwrtmgrd 把某 LAN 设备当前的稳定全球 IPv6（GUA）解析出来再推送，仅支持 AAAA（IPv6），隐私/临时地址设备可能无法稳定锁定。"
       />
       <Table
         rowKey="id"
@@ -261,28 +297,82 @@ export default function DdnsListPage() {
           </Form.Item>
           <Form.Item name="ip_source" label="解析方式" rules={[{ required: true }]}>
             <Select
+              onChange={(val) => {
+                if (val === 'device') form.setFieldsValue({ record_type: 'AAAA' });
+              }}
               options={[
                 { label: '互联网出口 IP（探测公网 IP）', value: 'web' },
                 { label: '接口 IP（取指定网卡地址）', value: 'network' },
+                { label: '按终端解析（某 LAN 设备当前 IPv6）', value: 'device' },
               ]}
             />
+          </Form.Item>
+          <Form.Item noStyle shouldUpdate={(p, c) => p.ip_source !== c.ip_source || p.mac !== c.mac}>
+            {({ getFieldValue }) => {
+              const src = getFieldValue('ip_source');
+              if (src === 'network') {
+                return (
+                  <Form.Item name="interface" label="解析网卡" rules={[{ required: true, message: '请输入网卡名' }]} extra="如 wan。">
+                    <Input placeholder="wan" allowClear />
+                  </Form.Item>
+                );
+              }
+              if (src === 'device') {
+                const mac = (getFieldValue('mac') || '').toUpperCase();
+                const sel = devices.find((d) => d.mac.toUpperCase() === mac);
+                return (
+                  <>
+                    <Alert
+                      type="info"
+                      showIcon
+                      style={{ marginBottom: 12 }}
+                      message="按终端解析仅支持 IPv6（AAAA）。kwrtmgrd 会持续把该终端当前的稳定全球 IPv6（GUA）解析出来更新到域名；ddns-scripts 负责推送。"
+                    />
+                    <Form.Item
+                      name="mac"
+                      label="目标终端"
+                      rules={[{ required: true, message: '请选择或输入终端 MAC' }]}
+                      extra="可从下拉选当前在线设备，或手动输入 MAC（如 00:11:22:aa:bb:cc）。隐私/临时地址设备可能无法稳定锁定。"
+                    >
+                      <AutoComplete
+                        options={deviceOptions}
+                        placeholder="选择设备或输入 MAC"
+                        filterOption={(input, option) => (option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
+                        allowClear
+                      />
+                    </Form.Item>
+                    {sel &&
+                      (sel.ipv6 ? (
+                        <Alert type="success" showIcon style={{ marginBottom: 12 }} message={`当前解析到：${sel.ipv6}（来源：${sel.source ?? '-'}）`} />
+                      ) : (
+                        <Alert
+                          type="warning"
+                          showIcon
+                          style={{ marginBottom: 12 }}
+                          message="该设备当前未发现可用全球 IPv6（GUA）：可能离线、未启用 IPv6、或仅有临时/隐私地址。"
+                        />
+                      ))}
+                  </>
+                );
+              }
+              return null;
+            }}
           </Form.Item>
           <Form.Item noStyle shouldUpdate={(p, c) => p.ip_source !== c.ip_source}>
-            {({ getFieldValue }) =>
-              getFieldValue('ip_source') === 'network' ? (
-                <Form.Item name="interface" label="解析网卡" rules={[{ required: true, message: '请输入网卡名' }]} extra="如 wan。">
-                  <Input placeholder="wan" allowClear />
+            {({ getFieldValue }) => {
+              const isDevice = getFieldValue('ip_source') === 'device';
+              return (
+                <Form.Item name="record_type" label="记录类型" rules={[{ required: true }]} extra={isDevice ? '按终端解析仅支持 AAAA（IPv6）。' : undefined}>
+                  <Select
+                    disabled={isDevice}
+                    options={[
+                      { label: 'A 记录（IPv4）', value: 'A' },
+                      { label: 'AAAA 记录（IPv6）', value: 'AAAA' },
+                    ]}
+                  />
                 </Form.Item>
-              ) : null
-            }
-          </Form.Item>
-          <Form.Item name="record_type" label="记录类型" rules={[{ required: true }]}>
-            <Select
-              options={[
-                { label: 'A 记录（IPv4）', value: 'A' },
-                { label: 'AAAA 记录（IPv6）', value: 'AAAA' },
-              ]}
-            />
+              );
+            }}
           </Form.Item>
           <Form.Item name="remark" label="备注">
             <Input placeholder="可空" allowClear />

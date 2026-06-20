@@ -753,6 +753,19 @@ paths:
       summary: DDNS 组件探测（是否已装 / 支持的服务商）
       responses:
         "200": { description: OK }
+  /api/v1/ddns/devices:
+    get:
+      tags: [ddns]
+      summary: 候选 LAN 终端（按终端解析时选目标设备；含当前解析到的稳定 GUA）
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/DDNSDevice" } }
   /api/v1/ddns/install:
     post:
       tags: [ddns]
@@ -1014,14 +1027,22 @@ components:
         auth_mode: { type: string, enum: [token, userpass] }
         username: { type: string }
         password: { type: string }
-        ip_source: { type: string, enum: [web, network] }
+        ip_source: { type: string, enum: [web, network, device], description: "web=出口IP；network=接口IP；device=按终端 MAC 解析其稳定 GUA（仅 AAAA）" }
         interface: { type: string }
+        mac: { type: string, description: "仅 ip_source=device：目标 LAN 终端 MAC" }
         record_type: { type: string, enum: [A, AAAA] }
         enabled: { type: boolean }
         remark: { type: string }
         last_result: { type: string }
         current_ip: { type: string }
         last_update: { type: string }
+    DDNSDevice:
+      type: object
+      properties:
+        mac: { type: string }
+        hostname: { type: string }
+        ipv6: { type: string, description: "当前解析到的稳定全球 IPv6（GUA），可空" }
+        source: { type: string, enum: [dhcpv6, slaac, neighbor], description: "GUA 来源：DHCPv6 租约 / EUI-64 稳定 SLAAC / 邻居表" }
     SpeedtestStatus:
       type: object
       properties:

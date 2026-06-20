@@ -10,8 +10,9 @@ export interface DDNSEntry {
   auth_mode: 'token' | 'userpass';
   username: string;
   password: string;
-  ip_source: 'web' | 'network'; // 出口IP | 接口IP
+  ip_source: 'web' | 'network' | 'device'; // 出口IP | 接口IP | 按终端 MAC 解析
   interface: string;
+  mac: string; // 仅 ip_source=device：目标 LAN 终端 MAC
   record_type: 'A' | 'AAAA';
   enabled: boolean;
   remark: string;
@@ -26,6 +27,14 @@ export interface DDNSSvcInfo {
   can_install: boolean;
   pkg_manager: string;
   providers: string[];
+}
+
+// 候选 LAN 终端（按终端解析时选目标设备）。
+export interface DDNSDevice {
+  mac: string;
+  hostname?: string;
+  ipv6?: string; // 当前解析到的稳定 GUA，可空
+  source?: 'dhcpv6' | 'slaac' | 'neighbor';
 }
 
 export type DDNSInput = Omit<DDNSEntry, 'id' | 'last_result' | 'current_ip' | 'last_update'>;
@@ -54,6 +63,10 @@ export async function batchDDNS(action: BatchAction, ids: string[]): Promise<voi
 export async function getDDNSService(): Promise<DDNSSvcInfo> {
   const { data } = await client.get('/api/v1/ddns/service');
   return data;
+}
+export async function listDDNSDevices(): Promise<DDNSDevice[]> {
+  const { data } = await client.get('/api/v1/ddns/devices');
+  return data.items ?? [];
 }
 export async function installDDNS(): Promise<{ output: string }> {
   const { data } = await client.post('/api/v1/ddns/install');

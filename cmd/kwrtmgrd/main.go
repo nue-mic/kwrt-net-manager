@@ -124,6 +124,9 @@ func runServe(args []string) int {
 
 	// 动态域名 DDNS（OpenWrt ddns-scripts；旁车 DATA_DIR/ddns.json）。
 	ddnsSvc := ddns.New(pkgmgr.RealRunner{}, filepath.Join(cfg.DataDir, "ddns.json"), nil)
+	// device 条目（按终端 MAC 解析 GUA）后台轮询：MAC→稳定 IPv6 写缓存，供 ddns-scripts ip_source='script' 拾取。
+	// IPv6 主线无 lease ubus 事件，故轮询（60s）。非 OpenWrt 环境解析为空 → 无副作用。
+	ddnsSvc.StartDevicePoller(arpCtx, 60*time.Second)
 	// 线路测速（OpenWrt speedtest-go）。
 	speedSvc := speedtest.New(pkgmgr.RealRunner{})
 

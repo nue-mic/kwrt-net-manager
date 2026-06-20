@@ -9,6 +9,8 @@ import (
 type fakeRunner struct {
 	uciBatch string // 捕获最后一次 uci batch 的 stdin
 	show     string // `uci show ddns` 返回
+	neigh    string // `ip -6 neighbor show` 返回
+	leases6  string // `ubus call dhcp ipv6leases` 返回
 }
 
 func (f *fakeRunner) Run(stdin, name string, args ...string) (string, error) {
@@ -18,6 +20,10 @@ func (f *fakeRunner) Run(stdin, name string, args ...string) (string, error) {
 		return "", nil
 	case name == "uci" && len(args) > 0 && args[0] == "show":
 		return f.show, nil
+	case name == "ip" && len(args) >= 2 && args[0] == "-6" && args[1] == "neighbor":
+		return f.neigh, nil
+	case name == "ubus" && len(args) >= 3 && args[0] == "call" && args[1] == "dhcp" && args[2] == "ipv6leases":
+		return f.leases6, nil
 	case name == "test": // pkgmgr.Installed: /etc/init.d/ddns 存在
 		return "", nil
 	}

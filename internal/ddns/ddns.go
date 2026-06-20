@@ -22,6 +22,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/mia-clark/kwrt-net-manager/pkg/netutil"
 )
 
 const (
@@ -42,9 +44,10 @@ type Entry struct {
 	AuthMode   string `json:"auth_mode"`   // token | userpass
 	Username   string `json:"username"`    // zone/账号（token 模式可空或填 zone）
 	Password   string `json:"password"`    // API Token/Key 或密码（密文）
-	IPSource   string `json:"ip_source"`   // web（出口IP）| network（接口IP）
+	IPSource   string `json:"ip_source"`   // web（出口IP）| network（接口IP）| device（按终端 MAC 解析）
 	Interface  string `json:"interface"`   // ip_network / 触发接口，如 wan
-	RecordType string `json:"record_type"` // A | AAAA
+	MAC        string `json:"mac"`         // 仅 ip_source=device：目标 LAN 终端 MAC
+	RecordType string `json:"record_type"` // A | AAAA（device 仅 AAAA）
 	Enabled    bool   `json:"enabled"`
 	Remark     string `json:"remark"`
 
@@ -56,10 +59,11 @@ type Entry struct {
 
 // Service 是 DDNS 领域服务。
 type Service struct {
-	run     Runner
-	sidecar string
-	mu      sync.Mutex
-	idFn    func() string
+	run       Runner
+	sidecar   string
+	scriptDir string // device 条目的缓存/脚本目录（默认 /var/run/kwrtmgrd-ddns；单测可覆盖）
+	mu        sync.Mutex
+	idFn      func() string
 }
 
 // New 构造。sidecar 为旁车 JSON 路径（DATA_DIR/ddns.json）。idFn 可空。
@@ -100,6 +104,18 @@ func (s *Service) enrich(e *Entry) {
 			}
 			return
 		}
+	}
+	// device 条目：ddns-scripts 尚未登记时，回退展示我们已解析到的设备 GUA。
+	if e.IPSource == "device" {
+		if b, err := os.ReadFile(s.deviceIPPath(e.ID)); err == nil {
+			if ip := strings.TrimSpace(string(b)); ip != "" {
+				e.CurrentIP = ip
+				e.LastResult = "等待更新"
+				return
+			}
+		}
+		e.LastResult = "等待解析"
+		return
 	}
 	e.LastResult = "等待更新"
 }
@@ -219,11 +235,21 @@ func validate(e Entry) error {
 	if strings.TrimSpace(e.Password) == "" {
 		return errors.New("API Token/密码不能为空")
 	}
-	if e.IPSource != "web" && e.IPSource != "network" {
-		return errors.New("解析方式只能为 出口IP(web) 或 接口IP(network)")
-	}
-	if e.IPSource == "network" && strings.TrimSpace(e.Interface) == "" {
-		return errors.New("接口IP 模式必须指定解析网卡")
+	switch e.IPSource {
+	case "web":
+	case "network":
+		if strings.TrimSpace(e.Interface) == "" {
+			return errors.New("接口IP 模式必须指定解析网卡")
+		}
+	case "device":
+		if netutil.NormalizeMAC(e.MAC) == "" {
+			return errors.New("按终端解析必须指定有效的目标设备 MAC")
+		}
+		if e.RecordType != "AAAA" {
+			return errors.New("按终端解析仅支持 IPv6（AAAA 记录）——LAN 设备私网 IPv4 推公网 DNS 无意义")
+		}
+	default:
+		return errors.New("解析方式只能为 出口IP(web) / 接口IP(network) / 终端解析(device)")
 	}
 	if e.RecordType != "A" && e.RecordType != "AAAA" {
 		return errors.New("记录类型只能为 A 或 AAAA")

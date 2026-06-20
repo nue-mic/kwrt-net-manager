@@ -71,7 +71,11 @@ func (s *Service) apply(items []Entry) error {
 		}
 		iface := e.Interface
 		if iface == "" {
-			iface = "wan"
+			if e.IPSource == "device" {
+				iface = "lan" // device 触发接口在 LAN 侧
+			} else {
+				iface = "wan"
+			}
 		}
 		set := func(k, v string) { fmt.Fprintf(&b, "set ddns.%s.%s='%s'\n", id, k, uciEsc(v)) }
 		fmt.Fprintf(&b, "set ddns.%s=service\n", id)
@@ -92,17 +96,31 @@ func (s *Service) apply(items []Entry) error {
 		}
 		set("password", e.Password)
 		set("use_ipv6", useV6)
-		set("ip_source", e.IPSource)
-		if e.IPSource == "network" {
+		checkInterval := "10"
+		switch e.IPSource {
+		case "device":
+			// device：ddns-scripts 无 MAC 解析能力 → 用 ip_source='script' 读 kwrtmgrd
+			// 解析并缓存的 GUA（ip_script=生成脚本，内容仅 cat 缓存文件）。
+			set("ip_source", "script")
+			set("ip_script", s.deviceScriptPath(id))
+			fmt.Fprintf(&b, "delete ddns.%s.ip_network\n", id)
+			_ = s.ensureDeviceScript(id) // 生成可执行脚本
+			if e.Enabled {
+				_, _, _ = s.refreshDevice(e) // 立即解析一次填充缓存（best-effort）
+			}
+			checkInterval = "2" // device IP 变化要更快被 ddns-scripts 拾取
+		case "network":
+			set("ip_source", "network")
 			set("ip_network", iface)
-		} else {
+		default:
+			set("ip_source", e.IPSource)
 			fmt.Fprintf(&b, "delete ddns.%s.ip_network\n", id)
 		}
 		set("interface", iface)
 		// 通用稳健项：走 HTTPS + 系统 CA、定时检查/强制刷新。
 		set("use_https", "1")
 		set("cacert", "/etc/ssl/certs")
-		set("check_interval", "10")
+		set("check_interval", checkInterval)
 		set("check_unit", "minutes")
 		set("force_interval", "72")
 		set("force_unit", "hours")

@@ -27,6 +27,7 @@ func registerDDNSRoutes(r chi.Router, svc *ddns.Service) {
 	r.Delete("/api/v1/ddns/{id}", h.Delete)
 	r.Post("/api/v1/ddns/{id}/toggle", h.Toggle)
 	r.Get("/api/v1/ddns/service", h.Service)
+	r.Get("/api/v1/ddns/devices", h.Devices)
 	r.Post("/api/v1/ddns/install", h.Install)
 }
 
@@ -117,6 +118,15 @@ func (h *DDNSHandler) Batch(w http.ResponseWriter, r *http.Request) {
 // Service GET /api/v1/ddns/service — 组件探测（是否已装 / 服务商列表）。
 func (h *DDNSHandler) Service(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, h.svc.ServiceInfo())
+}
+
+// Devices GET /api/v1/ddns/devices — 候选 LAN 终端（供「按终端解析」选目标设备）。
+func (h *DDNSHandler) Devices(w http.ResponseWriter, r *http.Request) {
+	items := h.svc.ListDevices()
+	if items == nil {
+		items = []ddns.Device{}
+	}
+	WriteJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
 // Install POST /api/v1/ddns/install — 一键安装 ddns-scripts。

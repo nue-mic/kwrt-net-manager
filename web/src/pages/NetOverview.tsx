@@ -85,6 +85,9 @@ export default function NetOverview() {
       await net.ifaceAction(id, action);
       message.success('已执行');
       reload();
+      // ifup/ifdown 是异步的：ubus 运行态会延迟一两秒才翻转，故 1.2s 后再刷一次，
+      // 抽屉「运行状态」会随 data 更新（见 liveIface）。
+      window.setTimeout(() => reload(), 1200);
     } catch (e) {
       message.error(extractErr(e));
     }
@@ -94,11 +97,19 @@ export default function NetOverview() {
     try {
       await net.deleteNetIface(id);
       message.success('已删除');
+      setDrawer((d) => ({ ...d, open: false, editing: null })); // 接口已删，关抽屉
       reload();
     } catch (e) {
       message.error(extractErr(e));
     }
   };
+
+  // 抽屉打开时，从最新 data 取该接口的「实时运行态」（up / 当前IP）单独传给抽屉，
+  // 这样断开/重拨/轮询后运行状态会刷新，又不会重置正在编辑的表单（editing 快照保持不动）。
+  const liveIface = useMemo(() => {
+    if (!drawer.editing) return null;
+    return [...(data.wans || []), ...(data.lans || [])].find((x) => x.id === drawer.editing!.id) || null;
+  }, [data, drawer.editing]);
 
   const needInstall = svc && !svc.dnsmasq_installed && svc.can_install;
 
@@ -192,6 +203,7 @@ export default function NetOverview() {
         open={drawer.open}
         role={drawer.role}
         editing={drawer.editing}
+        live={liveIface}
         nics={nics}
         onClose={() => setDrawer((d) => ({ ...d, open: false }))}
         onSaved={() => { setDrawer((d) => ({ ...d, open: false })); reload(); }}
@@ -269,6 +281,7 @@ interface DrawerProps {
   open: boolean;
   role: 'lan' | 'wan';
   editing: net.NetIface | null;
+  live: net.NetIface | null; // 该接口的最新运行态（来自 data，独立于 editing 快照）
   nics: net.NIC[];
   onClose: () => void;
   onSaved: () => void;
@@ -276,7 +289,7 @@ interface DrawerProps {
   onDelete: (id: string) => void;
 }
 
-function IfaceDrawer({ open, role, editing, nics, onClose, onSaved, onAction, onDelete }: DrawerProps) {
+function IfaceDrawer({ open, role, editing, live, nics, onClose, onSaved, onAction, onDelete }: DrawerProps) {
   const { message } = App.useApp();
   const navigate = useNavigate();
   const [form] = Form.useForm();
@@ -587,8 +600,9 @@ function IfaceDrawer({ open, role, editing, nics, onClose, onSaved, onAction, on
         {editing && role === 'wan' && (
           <Form.Item label="运行状态">
             <Space>
-              {editing.up ? <Tag color="success">已连接</Tag> : <Tag>未连接</Tag>}
-              {editing.runtime_ip && <Text>当前 IP：{editing.runtime_ip}</Text>}
+              {/* 运行态取最新 live（断开/重拨/轮询后会刷新），回退到 editing 快照 */}
+              {(live?.up ?? editing.up) ? <Tag color="success">已连接</Tag> : <Tag>未连接</Tag>}
+              {(live?.runtime_ip ?? editing.runtime_ip) && <Text>当前 IP：{live?.runtime_ip ?? editing.runtime_ip}</Text>}
             </Space>
           </Form.Item>
         )}

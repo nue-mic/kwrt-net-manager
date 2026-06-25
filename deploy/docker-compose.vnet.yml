@@ -16,7 +16,7 @@
 
 services:
   kwrtmgrd:
-    image: ghcr.io/mia-clark/kwrt-net-manager:${KWRTNET_IMAGE_TAG:-latest}
+    image: ghcr.io/nue-mic/kwrt-net-manager:${KWRTNET_IMAGE_TAG:-latest}
     container_name: docker_kwrtmgrd
     restart: always
     # host 网络：TUN 网卡与路由建在宿主网络命名空间，组网才能真正打通。

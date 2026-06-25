@@ -1,7 +1,7 @@
 
 services:
   kwrtmgrd:
-    image: ghcr.io/mia-clark/kwrt-net-manager:${KWRTNET_IMAGE_TAG:-latest}
+    image: ghcr.io/nue-mic/kwrt-net-manager:${KWRTNET_IMAGE_TAG:-latest}
     container_name: docker_kwrtmgrd
     restart: always
     network_mode: host

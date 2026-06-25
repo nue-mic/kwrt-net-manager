@@ -35,12 +35,12 @@ docker run -d --name kwrtmgrd --network host \
   -e KWRTNET_API_TOKEN=$(openssl rand -hex 32) \
   -e KWRTNET_NETCFG_BACKEND=auto \
   -v /var/lib/kwrtmgrd:/data \
-  ghcr.io/mia-clark/kwrt-net-manager:latest
+  ghcr.io/nue-mic/kwrt-net-manager:latest
 ```
 
 ### 二进制 / 一键脚本（Linux）
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mia-clark/kwrt-net-manager/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/nue-mic/kwrt-net-manager/main/scripts/install.sh | sh
 # 安装后用统一管理命令：kmc start|stop|restart|status|logs -f|url|update|uninstall
 ```
 

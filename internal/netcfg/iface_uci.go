@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mia-clark/kwrt-net-manager/pkg/netutil"
+	"github.com/nue-mic/kwrt-net-manager/pkg/netutil"
 )
 
 // ---- NIC inventory via /sys/class/net (no iproute2 dependency) ----

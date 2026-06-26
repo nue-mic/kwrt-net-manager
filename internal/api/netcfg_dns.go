@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/netcfg"
+	"github.com/nue-mic/kwrt-net-manager/internal/netcfg"
 )
 
 // ================= DNS 全局设置 / DoH（单例） =================

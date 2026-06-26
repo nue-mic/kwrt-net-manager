@@ -5,7 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/speedtest"
+	"github.com/nue-mic/kwrt-net-manager/internal/speedtest"
 )
 
 // SpeedtestHandler 服务「线路测速」端点（OpenWrt speedtest-go）。

@@ -10,8 +10,8 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/api/middleware"
-	"github.com/mia-clark/kwrt-net-manager/internal/logcenter"
+	"github.com/nue-mic/kwrt-net-manager/internal/api/middleware"
+	"github.com/nue-mic/kwrt-net-manager/internal/logcenter"
 )
 
 // DialStreamHandler 暴露「拨号实时日志」WebSocket 与「拨号诊断结论」端点。

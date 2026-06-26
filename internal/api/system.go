@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/sysinfo"
-	"github.com/mia-clark/kwrt-net-manager/pkg/version"
+	"github.com/nue-mic/kwrt-net-manager/internal/sysinfo"
+	"github.com/nue-mic/kwrt-net-manager/pkg/version"
 )
 
 // SystemHandler exposes /health, /version and /api/v1/system/*.

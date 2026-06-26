@@ -4,8 +4,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/selfupdate"
-	"github.com/mia-clark/kwrt-net-manager/pkg/version"
+	"github.com/nue-mic/kwrt-net-manager/internal/selfupdate"
+	"github.com/nue-mic/kwrt-net-manager/pkg/version"
 )
 
 // UpdateHandler serves the version-check and self-update endpoints:

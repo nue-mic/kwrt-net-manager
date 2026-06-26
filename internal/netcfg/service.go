@@ -11,8 +11,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/eventbus"
-	"github.com/mia-clark/kwrt-net-manager/pkg/netutil"
+	"github.com/nue-mic/kwrt-net-manager/internal/eventbus"
+	"github.com/nue-mic/kwrt-net-manager/pkg/netutil"
 )
 
 // ErrNotFound is returned when an id does not resolve to an item.

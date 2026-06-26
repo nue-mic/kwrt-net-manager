@@ -22,7 +22,7 @@
 # =============================================================================
 set -eu
 
-REPO="mia-clark/kwrt-net-manager"
+REPO="nue-mic/kwrt-net-manager"
 # 二进制名（解压后安装到 /usr/bin 的可执行文件）
 BIN_NAME="kwrtmgrd"
 # Release 资产前缀（tar.gz = ${ASSET_NAME}_<ver>_linux_<arch>.tar.gz，与 GitHub

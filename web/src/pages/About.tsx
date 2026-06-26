@@ -22,8 +22,8 @@ interface VersionResp {
   build_date?: string;
 }
 
-const APP_REPO = 'https://github.com/mia-clark/kwrt-net-manager';
-const APP_RELEASES = 'https://github.com/mia-clark/kwrt-net-manager/releases';
+const APP_REPO = 'https://github.com/nue-mic/kwrt-net-manager';
+const APP_RELEASES = 'https://github.com/nue-mic/kwrt-net-manager/releases';
 const APP_DOCS_PATH = '/api/docs/';
 
 const features = [

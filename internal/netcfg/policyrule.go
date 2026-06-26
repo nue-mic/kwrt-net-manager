@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/eventbus"
+	"github.com/nue-mic/kwrt-net-manager/internal/eventbus"
 )
 
 func (s *Service) ListPolicyRules() ([]PolicyRule, error) { return s.be.PolicyRules() }

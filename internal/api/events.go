@@ -9,8 +9,8 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/api/middleware"
-	"github.com/mia-clark/kwrt-net-manager/internal/eventbus"
+	"github.com/nue-mic/kwrt-net-manager/internal/api/middleware"
+	"github.com/nue-mic/kwrt-net-manager/internal/eventbus"
 )
 
 // EventsHandler upgrades HTTP requests to WebSocket and streams events

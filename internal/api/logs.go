@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/logcenter"
+	"github.com/nue-mic/kwrt-net-manager/internal/logcenter"
 )
 
 // LogHandler 服务「日志中心」端点（系统/DHCP/拨号/DDNS/操作/ARP）。

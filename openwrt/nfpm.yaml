@@ -21,9 +21,9 @@ version: "__PKG_VERSION__"
 release: "__PKG_RELEASE__"
 section: "net"
 priority: "optional"
-maintainer: "mia-clark <mia-clark@users.noreply.github.com>"
-vendor: "mia-clark"
-homepage: "https://github.com/mia-clark/kwrt-net-manager"
+maintainer: "nue-mic <nue-mic@users.noreply.github.com>"
+vendor: "nue-mic"
+homepage: "https://github.com/nue-mic/kwrt-net-manager"
 license: "GPL-3.0"
 description: |
   KWRT network manager (kwrtmgrd) — iKuai-style DHCP & static-route control

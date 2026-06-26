@@ -1,4 +1,4 @@
-module github.com/mia-clark/kwrt-net-manager
+module github.com/nue-mic/kwrt-net-manager
 
 go 1.25.0
 

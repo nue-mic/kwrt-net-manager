@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/pkgmgr"
+	"github.com/nue-mic/kwrt-net-manager/internal/pkgmgr"
 )
 
 // Runner 抽象命令执行。

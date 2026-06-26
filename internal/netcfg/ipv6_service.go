@@ -6,8 +6,8 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/eventbus"
-	"github.com/mia-clark/kwrt-net-manager/pkg/netutil"
+	"github.com/nue-mic/kwrt-net-manager/internal/eventbus"
+	"github.com/nue-mic/kwrt-net-manager/pkg/netutil"
 )
 
 // Service 的 IPv6 领域 API。沿用 IPv4 的 mutex+idFn+publish 模式：每个写操作

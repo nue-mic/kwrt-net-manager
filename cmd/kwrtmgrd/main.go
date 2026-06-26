@@ -13,17 +13,17 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/api"
-	"github.com/mia-clark/kwrt-net-manager/internal/appcfg"
-	"github.com/mia-clark/kwrt-net-manager/internal/backup"
-	"github.com/mia-clark/kwrt-net-manager/internal/ddns"
-	"github.com/mia-clark/kwrt-net-manager/internal/eventbus"
-	"github.com/mia-clark/kwrt-net-manager/internal/logcenter"
-	"github.com/mia-clark/kwrt-net-manager/internal/netcfg"
-	"github.com/mia-clark/kwrt-net-manager/internal/pkgmgr"
-	"github.com/mia-clark/kwrt-net-manager/internal/speedtest"
-	"github.com/mia-clark/kwrt-net-manager/internal/store"
-	"github.com/mia-clark/kwrt-net-manager/pkg/version"
+	"github.com/nue-mic/kwrt-net-manager/internal/api"
+	"github.com/nue-mic/kwrt-net-manager/internal/appcfg"
+	"github.com/nue-mic/kwrt-net-manager/internal/backup"
+	"github.com/nue-mic/kwrt-net-manager/internal/ddns"
+	"github.com/nue-mic/kwrt-net-manager/internal/eventbus"
+	"github.com/nue-mic/kwrt-net-manager/internal/logcenter"
+	"github.com/nue-mic/kwrt-net-manager/internal/netcfg"
+	"github.com/nue-mic/kwrt-net-manager/internal/pkgmgr"
+	"github.com/nue-mic/kwrt-net-manager/internal/speedtest"
+	"github.com/nue-mic/kwrt-net-manager/internal/store"
+	"github.com/nue-mic/kwrt-net-manager/pkg/version"
 )
 
 func main() {

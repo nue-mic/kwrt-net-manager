@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/netcfg"
+	"github.com/nue-mic/kwrt-net-manager/internal/netcfg"
 )
 
 // IPv6 子树的 HTTP handler（爱快 IPv6 菜单全套）。请求/响应体一律 snake_case，

@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/ddns"
+	"github.com/nue-mic/kwrt-net-manager/internal/ddns"
 )
 
 // DDNSHandler 服务「动态域名」端点（OpenWrt ddns-scripts）。

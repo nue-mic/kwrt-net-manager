@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mia-clark/kwrt-net-manager/pkg/netutil"
+	"github.com/nue-mic/kwrt-net-manager/pkg/netutil"
 )
 
 // uci 后端的 IPv6 运行态读：ubus / ip 真实数据（override store 的模拟）。

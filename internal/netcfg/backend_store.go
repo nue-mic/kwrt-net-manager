@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/mia-clark/kwrt-net-manager/pkg/netutil"
+	"github.com/nue-mic/kwrt-net-manager/pkg/netutil"
 )
 
 // storeBackend is the development / non-OpenWrt backend. It persists the managed

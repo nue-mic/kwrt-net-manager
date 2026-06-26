@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mia-clark/kwrt-net-manager/pkg/netutil"
+	"github.com/nue-mic/kwrt-net-manager/pkg/netutil"
 )
 
 // NICDetail builds the 综合详情 for a single NIC, reading everything OpenWrt is

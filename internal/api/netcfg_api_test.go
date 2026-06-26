@@ -10,10 +10,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/appcfg"
-	"github.com/mia-clark/kwrt-net-manager/internal/eventbus"
-	"github.com/mia-clark/kwrt-net-manager/internal/netcfg"
-	"github.com/mia-clark/kwrt-net-manager/internal/store"
+	"github.com/nue-mic/kwrt-net-manager/internal/appcfg"
+	"github.com/nue-mic/kwrt-net-manager/internal/eventbus"
+	"github.com/nue-mic/kwrt-net-manager/internal/netcfg"
+	"github.com/nue-mic/kwrt-net-manager/internal/store"
 )
 
 const testToken = "test-token"

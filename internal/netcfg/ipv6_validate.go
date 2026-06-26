@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mia-clark/kwrt-net-manager/pkg/netutil"
+	"github.com/nue-mic/kwrt-net-manager/pkg/netutil"
 )
 
 // IPv6 各类型的语义校验，全部在 Go 层、commit 之前（odhcpd/netifd 不校验，坏值

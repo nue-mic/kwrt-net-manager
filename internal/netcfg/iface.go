@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/eventbus"
-	"github.com/mia-clark/kwrt-net-manager/pkg/netutil"
+	"github.com/nue-mic/kwrt-net-manager/internal/eventbus"
+	"github.com/nue-mic/kwrt-net-manager/pkg/netutil"
 )
 
 // ================= NIC list (网卡列表) =================

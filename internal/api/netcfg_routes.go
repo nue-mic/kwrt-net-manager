@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/netcfg"
+	"github.com/nue-mic/kwrt-net-manager/internal/netcfg"
 )
 
 // NetcfgHandler serves the DHCP + static-routing endpoints on top of the

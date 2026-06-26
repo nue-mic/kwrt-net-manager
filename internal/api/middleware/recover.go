@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/api/apiresp"
+	"github.com/nue-mic/kwrt-net-manager/internal/api/apiresp"
 )
 
 // Recover turns panics inside handlers into 500 responses instead of

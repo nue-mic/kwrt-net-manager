@@ -20,7 +20,7 @@
 
 | 项 | 值 |
 |---|---|
-| Go 模块路径 | `github.com/mia-clark/kwrt-net-manager` |
+| Go 模块路径 | `github.com/nue-mic/kwrt-net-manager` |
 | 守护进程 / 服务 / 入口 | `kwrtmgrd`（`cmd/kwrtmgrd`，产物 `bin/kwrtmgrd`） |
 | 环境变量前缀 | `KWRTNET_`（如 `KWRTNET_API_TOKEN`） |
 | OpenWrt UCI 配置 | `/etc/config/kwrtmgrd` |

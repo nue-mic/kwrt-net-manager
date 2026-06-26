@@ -3,7 +3,7 @@ package netcfg
 import (
 	"errors"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/eventbus"
+	"github.com/nue-mic/kwrt-net-manager/internal/eventbus"
 )
 
 // ================= DNS 全局设置 / DoH（单例） =================

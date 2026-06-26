@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/mia-clark/kwrt-net-manager/pkg/netutil"
+	"github.com/nue-mic/kwrt-net-manager/pkg/netutil"
 )
 
 // dnsmasq 默认编译把 min/max-cache-ttl 钳到 1 小时（3600 秒）。

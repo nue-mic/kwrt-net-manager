@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/mia-clark/kwrt-net-manager/pkg/netutil"
+	"github.com/nue-mic/kwrt-net-manager/pkg/netutil"
 )
 
 func usedSet(ips ...string) map[uint32]bool {

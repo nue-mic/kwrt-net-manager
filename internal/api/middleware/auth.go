@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/api/apiresp"
+	"github.com/nue-mic/kwrt-net-manager/internal/api/apiresp"
 )
 
 // Bearer enforces a static Bearer token on every request. The token may be

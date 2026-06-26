@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/netcfg"
+	"github.com/nue-mic/kwrt-net-manager/internal/netcfg"
 )
 
 // ListPolicyRules GET /api/v1/policy-rules

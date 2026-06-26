@@ -8,16 +8,16 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/api/middleware"
-	"github.com/mia-clark/kwrt-net-manager/internal/appcfg"
-	"github.com/mia-clark/kwrt-net-manager/internal/backup"
-	"github.com/mia-clark/kwrt-net-manager/internal/ddns"
-	"github.com/mia-clark/kwrt-net-manager/internal/eventbus"
-	"github.com/mia-clark/kwrt-net-manager/internal/logcenter"
-	"github.com/mia-clark/kwrt-net-manager/internal/netcfg"
-	"github.com/mia-clark/kwrt-net-manager/internal/speedtest"
-	"github.com/mia-clark/kwrt-net-manager/internal/store"
-	"github.com/mia-clark/kwrt-net-manager/web"
+	"github.com/nue-mic/kwrt-net-manager/internal/api/middleware"
+	"github.com/nue-mic/kwrt-net-manager/internal/appcfg"
+	"github.com/nue-mic/kwrt-net-manager/internal/backup"
+	"github.com/nue-mic/kwrt-net-manager/internal/ddns"
+	"github.com/nue-mic/kwrt-net-manager/internal/eventbus"
+	"github.com/nue-mic/kwrt-net-manager/internal/logcenter"
+	"github.com/nue-mic/kwrt-net-manager/internal/netcfg"
+	"github.com/nue-mic/kwrt-net-manager/internal/speedtest"
+	"github.com/nue-mic/kwrt-net-manager/internal/store"
+	"github.com/nue-mic/kwrt-net-manager/web"
 )
 
 // Deps bundles the collaborators that handlers need.

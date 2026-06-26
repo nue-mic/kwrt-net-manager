@@ -23,7 +23,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/mia-clark/kwrt-net-manager/pkg/netutil"
+	"github.com/nue-mic/kwrt-net-manager/pkg/netutil"
 )
 
 const (

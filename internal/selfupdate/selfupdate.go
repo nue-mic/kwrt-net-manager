@@ -24,9 +24,9 @@ import (
 )
 
 const (
-	defaultRepo       = "mia-clark/kwrt-net-manager"
-	defaultInstallSh  = "https://raw.githubusercontent.com/mia-clark/kwrt-net-manager/main/scripts/install.sh"
-	defaultInstallPs1 = "https://raw.githubusercontent.com/mia-clark/kwrt-net-manager/main/scripts/install.ps1"
+	defaultRepo       = "nue-mic/kwrt-net-manager"
+	defaultInstallSh  = "https://raw.githubusercontent.com/nue-mic/kwrt-net-manager/main/scripts/install.sh"
+	defaultInstallPs1 = "https://raw.githubusercontent.com/nue-mic/kwrt-net-manager/main/scripts/install.ps1"
 	cacheTTL          = time.Hour
 	httpTimeout       = 12 * time.Second
 )
@@ -49,7 +49,7 @@ type Release struct {
 
 // Config configures an Updater.
 type Config struct {
-	// Repo is the "owner/name" GitHub repo. Defaults to mia-clark/kwrt-net-manager.
+	// Repo is the "owner/name" GitHub repo. Defaults to nue-mic/kwrt-net-manager.
 	Repo string
 	// InstallShURL / InstallPs1URL point at the installer scripts the spawned
 	// updater downloads. Empty values fall back to the official raw URLs,

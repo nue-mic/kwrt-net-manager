@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mia-clark/kwrt-net-manager/pkg/netutil"
+	"github.com/nue-mic/kwrt-net-manager/pkg/netutil"
 )
 
 // Managed-section marker. Only UCI sections carrying option managed_by =

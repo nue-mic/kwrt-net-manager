@@ -7,8 +7,8 @@
 #   功能: 自动识别系统架构 -> 下载对应二进制 -> 安装 -> 注册系统服务 -> 开机自启
 #
 # 一行安装 (推荐, 支持交互):
-#   sh -c "$(curl -fsSL https://raw.githubusercontent.com/mia-clark/kwrt-net-manager/main/scripts/install.sh)"
-#   sh -c "$(wget -qO- https://raw.githubusercontent.com/mia-clark/kwrt-net-manager/main/scripts/install.sh)"
+#   sh -c "$(curl -fsSL https://raw.githubusercontent.com/nue-mic/kwrt-net-manager/main/scripts/install.sh)"
+#   sh -c "$(wget -qO- https://raw.githubusercontent.com/nue-mic/kwrt-net-manager/main/scripts/install.sh)"
 #   国内加速 (自建 gh-raw 脚本镜像, key=kwrt-net-mgr):
 #   sh -c "$(curl -fsSL https://gh-raw.966788.xyz/kwrt-net-mgr/install.sh)"
 #
@@ -26,7 +26,7 @@ set -eu
 # ----------------------------------------------------------------------------
 # 常量配置
 # ----------------------------------------------------------------------------
-REPO="mia-clark/kwrt-net-manager"
+REPO="nue-mic/kwrt-net-manager"
 BIN_NAME="kwrtmgrd"
 # Release 资产前缀（tar.gz = ${ASSET_NAME}_<ver>_<os>_<arch>.tar.gz；二进制内部仍为 ${BIN_NAME}）
 ASSET_NAME="kwrt-net-manager"

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/pkgmgr"
+	"github.com/nue-mic/kwrt-net-manager/internal/pkgmgr"
 )
 
 // SvcInfo 报告 DDNS 组件状态，供前端决定是否提示「一键安装」。

@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/api/middleware"
-	"github.com/mia-clark/kwrt-net-manager/internal/appcfg"
-	"github.com/mia-clark/kwrt-net-manager/internal/store"
+	"github.com/nue-mic/kwrt-net-manager/internal/api/middleware"
+	"github.com/nue-mic/kwrt-net-manager/internal/appcfg"
+	"github.com/nue-mic/kwrt-net-manager/internal/store"
 )
 
 // validLogLevels are the accepted runtime log-level names.

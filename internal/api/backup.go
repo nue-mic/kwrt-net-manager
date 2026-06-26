@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/backup"
-	"github.com/mia-clark/kwrt-net-manager/internal/store"
+	"github.com/nue-mic/kwrt-net-manager/internal/backup"
+	"github.com/nue-mic/kwrt-net-manager/internal/store"
 )
 
 // Timeouts for channel operations.

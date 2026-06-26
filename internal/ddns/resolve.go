@@ -26,7 +26,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mia-clark/kwrt-net-manager/pkg/netutil"
+	"github.com/nue-mic/kwrt-net-manager/pkg/netutil"
 )
 
 // Device 是一台候选 LAN 终端（供前端选择 + 展示当前解析到的 GUA）。

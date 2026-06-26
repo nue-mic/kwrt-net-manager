@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/mia-clark/kwrt-net-manager/internal/store"
+	"github.com/nue-mic/kwrt-net-manager/internal/store"
 )
 
 // UIHandler serves the operator-customizable UI branding (brand name +

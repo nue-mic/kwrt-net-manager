@@ -95,11 +95,24 @@ type NetIface struct {
 	Ports  []string `json:"ports"`
 
 	// Static addressing (LAN always; WAN when proto=static).
-	IPAddr       string `json:"ipaddr"`
-	Netmask      string `json:"netmask"`
-	Gateway      string `json:"gateway"`
-	DNSPrimary   string `json:"dns_primary"`
-	DNSSecondary string `json:"dns_secondary"`
+	IPAddr  string `json:"ipaddr"`
+	Netmask string `json:"netmask"`
+	Gateway string `json:"gateway"`
+
+	// DNS 是该接口的「自定义 DNS 服务器」，落地 OpenWrt 接口段 `list dns`（多条，
+	// IPv4/IPv6 混合）。语义是【路由器自身(及经 dnsmasq 转发的查询)所用的上游解析器】
+	// （写入 resolv.conf.auto），而【不是】下发给 DHCP 客户端的 DNS——后者在 DHCPServer
+	// 的 DNS 字段（dhcp_option 6）。dhcp/pppoe 上要「只用自定义 DNS」需配合 PeerDNS=false。
+	DNS []string `json:"dns"`
+	// DNSMetric 落地 `option dns_metric`：多接口都提供 DNS 时，决定它们在 resolv.conf.auto
+	// 中的排序（越小越靠前、越优先）。0=不设。
+	DNSMetric int `json:"dns_metric,omitempty"`
+
+	// DNSPrimaryLegacy/DNSSecondaryLegacy 仅用于从旧 netcfg.json 平滑迁移：旧版接口 DNS
+	// 存成 dns_primary/dns_secondary 两个标量；store.normalize 在加载时把它们折叠进 DNS[]
+	// 后清空。不在 openapi/前端暴露；前端已改为只发 `dns` 数组。
+	DNSPrimaryLegacy   string `json:"dns_primary,omitempty"`
+	DNSSecondaryLegacy string `json:"dns_secondary,omitempty"`
 
 	// PPPoE (WAN proto=pppoe).
 	Username string `json:"username"`

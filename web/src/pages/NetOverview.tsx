@@ -345,6 +345,8 @@ function IfaceDrawer({ open, role, editing, live, nics, onClose, onSaved, onActi
   const [saving, setSaving] = useState(false);
   const [dialOpen, setDialOpen] = useState(false); // 拨号日志 Modal
   const proto = Form.useWatch('proto', form) as string | undefined;
+  // peerdns 开关（仅 WAN dhcp/pppoe 有意义）：开=用上游下发的 DNS；关=露出自定义 DNS 列表。
+  const peerdns = Form.useWatch('peerdns', form) as boolean | undefined;
 
   // 可绑定的物理网卡：空闲 + 当前接口已绑定的
   const phys = useMemo(() => nics.filter((n) => n.kind === 'physical'), [nics]);
@@ -355,12 +357,12 @@ function IfaceDrawer({ open, role, editing, live, nics, onClose, onSaved, onActi
       form.setFieldsValue({
         id: editing.id, proto: editing.proto, ipaddr: editing.ipaddr,
         prefix: editing.netmask ? maskToPrefix(editing.netmask) : 24,
-        gateway: editing.gateway, dns_primary: editing.dns_primary, dns_secondary: editing.dns_secondary,
+        gateway: editing.gateway, dns: editing.dns || [], dns_metric: editing.dns_metric || 0,
         username: editing.username, password: editing.password, service: editing.service, ac: editing.ac,
         mtu: editing.mtu || 1500, default_gw: editing.default_gw, remark: editing.remark,
         ports: editing.ports, device: editing.device, clone_mac: editing.clone_mac,
         extra_addrs: editing.extra_addrs || [],
-        metric: editing.metric || 0, peerdns: editing.peerdns ?? undefined,
+        metric: editing.metric || 0, peerdns: editing.peerdns ?? true,
         broadcast: editing.broadcast || '', force_link: editing.force_link ?? undefined,
         auto: editing.auto ?? undefined, ip6assign: editing.ip6assign || 0,
         ip6hint: editing.ip6hint || '', ip6gw: editing.ip6gw || '',
@@ -372,6 +374,7 @@ function IfaceDrawer({ open, role, editing, live, nics, onClose, onSaved, onActi
         id: '', proto: role === 'wan' ? 'dhcp' : 'static', prefix: 24,
         mtu: 1500, default_gw: true, ports: [], device: '', extra_addrs: [],
         ipaddr: role === 'lan' ? '192.168.2.1' : '',
+        dns: [], dns_metric: 0, peerdns: true,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -422,8 +425,9 @@ function IfaceDrawer({ open, role, editing, live, nics, onClose, onSaved, onActi
       ipaddr: v.ipaddr || '',
       netmask: v.ipaddr ? prefixToMask(v.prefix || 24) : '',
       gateway: v.gateway || '',
-      dns_primary: v.dns_primary || '',
-      dns_secondary: v.dns_secondary || '',
+      // 接口自定义 DNS：trim + 去空行；后端再做 IPv4/IPv6 校验与去重
+      dns: ((v.dns as (string | undefined)[]) || []).map((d) => (d || '').trim()).filter(Boolean),
+      dns_metric: v.dns_metric || 0,
       username: v.username || '',
       password: v.password || '',
       service: v.service || '',
@@ -434,7 +438,8 @@ function IfaceDrawer({ open, role, editing, live, nics, onClose, onSaved, onActi
       remark: v.remark || '',
       extra_addrs: extra,
       metric: v.metric || 0,
-      peerdns: v.peerdns,
+      // peerdns 仅对 WAN dhcp/pppoe 有意义；其余接口不下发（后端 nil 即删除该 option）
+      peerdns: role === 'wan' && (v.proto === 'dhcp' || v.proto === 'pppoe') ? !!v.peerdns : undefined,
       broadcast: v.broadcast || '',
       force_link: v.force_link,
       auto: v.auto,
@@ -637,12 +642,45 @@ function IfaceDrawer({ open, role, editing, live, nics, onClose, onSaved, onActi
           </>
         )}
 
-        {/* DNS（静态 WAN） */}
-        {role === 'wan' && proto === 'static' && (
-          <Row gutter={12}>
-            <Col span={12}><Form.Item label="首选 DNS" name="dns_primary"><Input placeholder="223.5.5.5" /></Form.Item></Col>
-            <Col span={12}><Form.Item label="备选 DNS" name="dns_secondary"><Input placeholder="114.114.114.114" /></Form.Item></Col>
-          </Row>
+        {/* DNS：接口自定义 DNS = 路由器自身(经 dnsmasq 转发)的上游解析器，非下发给客户端的 DNS。
+            LAN/static 直接可填多条；WAN dhcp/pppoe 先关「使用上游下发的 DNS」(peerdns=0)再填自定义。 */}
+        {role === 'wan' && (proto === 'dhcp' || proto === 'pppoe') && (
+          <Form.Item
+            label="使用上游自动下发的 DNS"
+            name="peerdns"
+            valuePropName="checked"
+            tooltip="开启：使用 DHCP/PPPoE 上游(运营商)下发的 DNS。关闭后可在下方填自定义 DNS（仅用自定义、屏蔽上游）"
+          >
+            <Switch />
+          </Form.Item>
+        )}
+        {(role === 'lan' || proto === 'static' || ((proto === 'dhcp' || proto === 'pppoe') && peerdns === false)) && (
+          <Form.Item label="自定义 DNS 服务器" tooltip="可填多条，IPv4 / IPv6 均可，按先后顺序作为上游解析器">
+            {role === 'lan' && (
+              <Alert
+                type="info"
+                showIcon
+                banner
+                style={{ marginBottom: 8, padding: '4px 10px' }}
+                message="这是路由器自身的上游解析器（写入本机 resolv.conf），不是下发给客户端的 DNS。要给内网终端指定 DNS，请到「DHCP 服务端」配置。"
+              />
+            )}
+            <Form.List name="dns">
+              {(fields, { add, remove }) => (
+                <Space direction="vertical" style={{ width: '100%' }} size={6}>
+                  {fields.map(({ key, name, ...rest }) => (
+                    <Space key={key} align="baseline">
+                      <Form.Item {...rest} name={name} noStyle rules={[{ required: true, message: '请填写 DNS 或删除此行' }]}>
+                        <Input placeholder="223.5.5.5 / 2400:3200::1" style={{ width: 300 }} />
+                      </Form.Item>
+                      <DeleteOutlined onClick={() => remove(name)} />
+                    </Space>
+                  ))}
+                  <Button type="dashed" onClick={() => add()} icon={<PlusOutlined />} block>新增 DNS 服务器</Button>
+                </Space>
+              )}
+            </Form.List>
+          </Form.Item>
         )}
 
         {role === 'wan' && (
@@ -678,8 +716,8 @@ function IfaceDrawer({ open, role, editing, live, nics, onClose, onSaved, onActi
                     </Space>} />
                 </Form.Item>
               )}
-              <Form.Item label="使用上游下发 DNS (peerdns)" name="peerdns" tooltip="留空=默认；关闭则只用手填 DNS">
-                <Select allowClear placeholder="默认" options={[{ value: true, label: '是' }, { value: false, label: '否' }]} style={{ width: 160 }} />
+              <Form.Item label="DNS 权重 (dns_metric)" name="dns_metric" tooltip="多接口都提供 DNS 时，数值越小该接口的 DNS 越优先（0=不设）">
+                <InputNumber min={0} max={9999} style={{ width: 160 }} />
               </Form.Item>
               <Form.Item label="开机自启 (auto)" name="auto">
                 <Select allowClear placeholder="默认(是)" options={[{ value: true, label: '是' }, { value: false, label: '否' }]} style={{ width: 160 }} />

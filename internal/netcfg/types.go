@@ -226,6 +226,7 @@ func CloneState(s State) State {
 		src := s.NetIfaces[i]
 		out.NetIfaces[i].Ports = append([]string(nil), src.Ports...)
 		out.NetIfaces[i].ExtraAddrs = append([]IfaceAddr(nil), src.ExtraAddrs...)
+		out.NetIfaces[i].DNS = append([]string(nil), src.DNS...)
 		out.NetIfaces[i].PeerDNS = cloneBoolPtr(src.PeerDNS)
 		out.NetIfaces[i].ForceLink = cloneBoolPtr(src.ForceLink)
 		out.NetIfaces[i].Auto = cloneBoolPtr(src.Auto)

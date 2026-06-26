@@ -228,6 +228,7 @@ func (b *uciBackend) NetIfaces() ([]NetIface, error) {
 		ni.DefaultGW = first(s.opts["defaultroute"]) != "0"
 		// 全量字段回读
 		ni.Metric = atoiSafe(first(s.opts["metric"]))
+		ni.DNSMetric = atoiSafe(first(s.opts["dns_metric"]))
 		ni.PeerDNS = parseBoolOpt(s.opts["peerdns"])
 		ni.Broadcast = first(s.opts["broadcast"])
 		ni.ForceLink = parseBoolOpt(s.opts["force_link"])
@@ -273,13 +274,9 @@ func (b *uciBackend) NetIfaces() ([]NetIface, error) {
 			}
 			ni.ExtraAddrs = append(ni.ExtraAddrs, IfaceAddr{Address: a, Prefix: prefix, Family: FamilyIPv6, Enabled: true})
 		}
-		dns := s.opts["dns"]
-		if len(dns) > 0 {
-			ni.DNSPrimary = dns[0]
-		}
-		if len(dns) > 1 {
-			ni.DNSSecondary = dns[1]
-		}
+		// 接口自身 DNS：list dns（parseUci 把 option 与 list 同名都收进切片），全量读入，
+		// IPv4/IPv6 通吃；不再截断为主/备两条。
+		ni.DNS = append([]string(nil), s.opts["dns"]...)
 		// ports: bridge members, or the single device
 		if p, ok := bridgePorts[ni.Device]; ok {
 			ni.Ports = p
@@ -406,16 +403,9 @@ func (b *uciBackend) SaveNetIface(in NetIface) error {
 			writeAddr6List(&sb, id, in)
 			setOptOrDel(&sb, id, "gateway", in.Gateway)
 			delOpt(&sb, id, "username", "password")
-			fmt.Fprintf(&sb, "delete network.%s.dns\n", id)
-			if dns := joinDNS(in.DNSPrimary, in.DNSSecondary); dns != "" {
-				for _, d := range strings.Split(dns, ",") {
-					fmt.Fprintf(&sb, "add_list network.%s.dns='%s'\n", id, d)
-				}
-			}
 		default: // dhcp
 			fmt.Fprintf(&sb, "set network.%s.proto='dhcp'\n", id)
 			delOpt(&sb, id, "ipaddr", "netmask", "gateway", "username", "password", "ip6addr")
-			fmt.Fprintf(&sb, "delete network.%s.dns\n", id)
 		}
 		dev := in.Device
 		if dev == "" && len(in.Ports) > 0 {
@@ -437,6 +427,9 @@ func (b *uciBackend) SaveNetIface(in NetIface) error {
 	}
 	setOptOrDel(&sb, id, "remark", in.Remark)
 	writeIfaceExtraOpts(&sb, id, in)
+	// 接口自定义 DNS：LAN / WAN-static / WAN-dhcp / WAN-pppoe 全部统一投射 list dns，
+	// 消除「LAN 不写、dhcp/pppoe 直接删」的历史不一致（顺带清掉 pppoe 残留的旧 dns）。
+	writeDNSList(&sb, id, in.DNS)
 	b.ensureDeviceMAC(&sb, id, chosenDev, in.CloneMAC)
 	// 拓扑/设备切换回收：旧托管 device 段若不再对应新选中的 chosenDev，则删除，
 	// 避免孤儿桥段或旧 clone_mac 段残留（newSec 基于旧 UCI；新建的桥段尚不在其中）。
@@ -453,6 +446,11 @@ func (b *uciBackend) SaveNetIface(in NetIface) error {
 	}
 	if initdExists("network") {
 		_, _ = b.run.Run("", "/etc/init.d/network", "reload")
+	}
+	// 接口 DNS/peerdns/dns_metric 变化会经 netifd 改写 /tmp/resolv.conf.auto，但 dnsmasq
+	// 不会自动重读——补一次 best-effort reload，让自定义上游 DNS 立即生效（失败不阻断保存）。
+	if initdExists("dnsmasq") {
+		_, _ = b.run.Run("", "/etc/init.d/dnsmasq", "reload")
 	}
 	b.ensureZoneMembership(id, in.Role)
 	return nil
@@ -846,6 +844,18 @@ func writeAddr6List(sb *strings.Builder, id string, in NetIface) {
 	}
 }
 
+// writeDNSList 把接口自定义 DNS 统一投射为 `list dns`：先 delete 清旧（option/list 皆清），
+// 再逐条 add_list（IPv4/IPv6 通吃，跳过空串）。所有 role/proto 通用；空列表则仅 delete，
+// 顺带清掉历史上 pppoe 分支从不清理而残留的旧 dns。只用 ≤19.07 通用原语。
+func writeDNSList(sb *strings.Builder, id string, dns []string) {
+	fmt.Fprintf(sb, "delete network.%s.dns\n", id)
+	for _, d := range dns {
+		if d = strings.TrimSpace(d); d != "" {
+			fmt.Fprintf(sb, "add_list network.%s.dns='%s'\n", id, d)
+		}
+	}
+}
+
 func setOptOrDel(sb *strings.Builder, id, opt, val string) {
 	if strings.TrimSpace(val) == "" {
 		fmt.Fprintf(sb, "delete network.%s.%s\n", id, opt)
@@ -879,6 +889,11 @@ func writeIfaceExtraOpts(sb *strings.Builder, id string, in NetIface) {
 		fmt.Fprintf(sb, "set network.%s.metric='%d'\n", id, in.Metric)
 	} else {
 		fmt.Fprintf(sb, "delete network.%s.metric\n", id)
+	}
+	if in.DNSMetric > 0 {
+		fmt.Fprintf(sb, "set network.%s.dns_metric='%d'\n", id, in.DNSMetric)
+	} else {
+		fmt.Fprintf(sb, "delete network.%s.dns_metric\n", id)
 	}
 	setBoolOptOrDel(sb, id, "peerdns", in.PeerDNS)
 	setOptOrDel(sb, id, "broadcast", in.Broadcast)

@@ -8,6 +8,7 @@ import "strings"
 func cloneIface(x NetIface) NetIface {
 	x.Ports = append([]string(nil), x.Ports...)
 	x.ExtraAddrs = append([]IfaceAddr(nil), x.ExtraAddrs...)
+	x.DNS = append([]string(nil), x.DNS...)
 	x.PeerDNS = cloneBoolPtr(x.PeerDNS)
 	x.ForceLink = cloneBoolPtr(x.ForceLink)
 	x.Auto = cloneBoolPtr(x.Auto)

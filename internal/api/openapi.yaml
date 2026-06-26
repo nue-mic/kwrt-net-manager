@@ -1287,8 +1287,11 @@ components:
         ipaddr: { type: string }
         netmask: { type: string }
         gateway: { type: string }
-        dns_primary: { type: string }
-        dns_secondary: { type: string }
+        dns:
+          type: array
+          items: { type: string }
+          description: "接口自定义 DNS（list dns，多条；IPv4/IPv6 通吃）。语义为路由器自身(经 dnsmasq 转发)所用的上游解析器，非下发给 DHCP 客户端的 DNS（后者在 DHCPServer）"
+        dns_metric: { type: integer, description: "option dns_metric：多接口都提供 DNS 时决定 resolv.conf.auto 排序，越小越优先（0=不设）" }
         username: { type: string }
         password: { type: string }
         service: { type: string }

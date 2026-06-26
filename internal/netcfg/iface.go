@@ -249,11 +249,29 @@ func validateNetIface(in *NetIface) error {
 	if in.MTU < 0 || in.MTU > 9200 {
 		return errors.New("MTU 越界（0-9200）")
 	}
-	if in.DNSPrimary != "" && !netutil.IsIPv4(in.DNSPrimary) {
-		return errors.New("首选 DNS 不合法")
+	// 接口自定义 DNS：多条，IPv4/IPv6 通吃；去重并过滤空行（前端动态列表常留空行）。
+	// 原地过滤后写回 in.DNS，保证落地的就是归一化后的列表。
+	{
+		cleaned := in.DNS[:0]
+		seen := map[string]bool{}
+		for _, d := range in.DNS {
+			d = strings.TrimSpace(d)
+			if d == "" {
+				continue
+			}
+			if !netutil.IsIPv4(d) && !netutil.IsIPv6(d) {
+				return errors.New("DNS 服务器不是合法的 IPv4/IPv6 地址：" + d)
+			}
+			if seen[d] {
+				return errors.New("DNS 服务器重复：" + d)
+			}
+			seen[d] = true
+			cleaned = append(cleaned, d)
+		}
+		in.DNS = cleaned
 	}
-	if in.DNSSecondary != "" && !netutil.IsIPv4(in.DNSSecondary) {
-		return errors.New("备选 DNS 不合法")
+	if in.DNSMetric < 0 {
+		return errors.New("DNS 权重（dns_metric）不能为负")
 	}
 	// 附加 IP + 去重（与主 IP、彼此）
 	seen := map[string]bool{}

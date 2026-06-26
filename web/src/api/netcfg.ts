@@ -354,8 +354,8 @@ export interface NetIface {
   ipaddr: string;
   netmask: string;
   gateway: string;
-  dns_primary: string;
-  dns_secondary: string;
+  dns: string[];        // 接口自定义 DNS（多条，IPv4/IPv6 通吃）；路由器自身(经 dnsmasq 转发)的上游解析器，非下发给 DHCP 客户端的 DNS
+  dns_metric?: number;  // DNS 权重（option dns_metric）：多接口都提供 DNS 时决定 resolv.conf 排序，越小越优先
   username: string;
   password: string;
   service: string;

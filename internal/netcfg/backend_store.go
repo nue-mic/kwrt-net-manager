@@ -67,6 +67,19 @@ func (b *storeBackend) normalize() {
 	if b.st.ACL.Entries == nil {
 		b.st.ACL.Entries = []ACLEntry{}
 	}
+	// 旧数据迁移：早期接口 DNS 存成 dns_primary/dns_secondary 两个标量；现已升级为 DNS[]
+	// 多条列表。若新字段为空而旧字段有值，折叠进 DNS[] 后清空旧字段（下次落盘即只写新格式）。
+	for i := range b.st.NetIfaces {
+		ni := &b.st.NetIfaces[i]
+		if len(ni.DNS) == 0 {
+			for _, d := range []string{ni.DNSPrimaryLegacy, ni.DNSSecondaryLegacy} {
+				if d != "" {
+					ni.DNS = append(ni.DNS, d)
+				}
+			}
+		}
+		ni.DNSPrimaryLegacy, ni.DNSSecondaryLegacy = "", ""
+	}
 }
 
 func (b *storeBackend) Kind() string { return KindStore }

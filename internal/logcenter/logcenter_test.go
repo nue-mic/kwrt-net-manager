@@ -1,6 +1,7 @@
 package logcenter
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -91,6 +92,39 @@ func TestQuerySources(t *testing.T) {
 
 	if _, err := c.Query("bogus", Filter{}); err == nil {
 		t.Error("bogus source should error")
+	}
+}
+
+// 多线路拨号日志：两条不同接口(pppoe-wan1 / pppoe-wan2) + 一条抽不到接口名的行。
+const dialLogread = `Tue Jun 16 22:05:20 2026 daemon.info pppd[1]: pppoe-wan1: Send PPPOE Discovery
+Tue Jun 16 22:05:21 2026 daemon.info pppd[2]: pppoe-wan2: Send PPPOE Discovery
+Tue Jun 16 22:05:22 2026 daemon.notice pppd[3]: PPP session established`
+
+func TestDialupIfaceFilter(t *testing.T) {
+	c := New(t.TempDir(), nil)
+	c.loc = time.FixedZone("local", 8*3600)
+	c.run = fakeRunner{out: map[string]string{"date": "+0800", "logread": dialLogread}}
+
+	all, _ := c.Query(SourceDialup, Filter{Page: 1, PageSize: 50})
+	if all.Total != 3 {
+		t.Fatalf("dialup all total=%d want 3", all.Total)
+	}
+
+	// 选 wan1：滤掉 wan2，保留 wan1 + 无接口名行(established)。
+	w1, _ := c.Query(SourceDialup, Filter{Iface: "wan1", Page: 1, PageSize: 50})
+	if w1.Total != 2 {
+		t.Fatalf("dialup wan1 total=%d want 2 (wan1 + 无接口行)", w1.Total)
+	}
+	for _, e := range w1.Items {
+		if e.Iface != "" && !strings.Contains(e.Iface, "wan1") {
+			t.Errorf("wan1 过滤泄漏 iface=%q", e.Iface)
+		}
+	}
+
+	// 线路过滤只对 dialup 生效：system 源忽略 Iface。
+	sys, _ := c.Query(SourceSystem, Filter{Iface: "wan1", Page: 1, PageSize: 50})
+	if sys.Total != 3 {
+		t.Errorf("system 源不应受 Iface 影响, total=%d want 3", sys.Total)
 	}
 }
 

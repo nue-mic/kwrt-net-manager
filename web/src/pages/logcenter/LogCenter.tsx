@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { App, Button, DatePicker, Input, Popconfirm, Space, Table, Tag, Typography } from 'antd';
+import { useSearchParams } from 'react-router-dom';
+import { App, Button, DatePicker, Input, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { DownloadOutlined, ReloadOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { Dayjs } from 'dayjs';
 import PageCard from '../../components/PageCard';
 import { extractErr } from '../../hooks/useNetData';
 import * as logs from '../../api/logs';
+import * as net from '../../api/netcfg';
 
 const { RangePicker } = DatePicker;
 
@@ -110,16 +112,20 @@ export default function LogCenter({ source }: { source: logs.LogSource }) {
   const [pageSize, setPageSize] = useState(20);
   const [keyword, setKeyword] = useState('');
   const [range, setRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
+  const [iface, setIface] = useState<string | undefined>(undefined); // dialup 线路过滤
+  const [wans, setWans] = useState<net.NetIface[]>([]); // dialup 线路下拉选项
+  const [searchParams] = useSearchParams();
 
   const query = useMemo<logs.LogQuery>(
     () => ({
       start: range?.[0] ? range[0].startOf('second').unix() : undefined,
       end: range?.[1] ? range[1].endOf('second').unix() : undefined,
       keyword: keyword.trim() || undefined,
+      iface: source === 'dialup' ? iface : undefined,
       page,
       page_size: pageSize,
     }),
-    [range, keyword, page, pageSize]
+    [range, keyword, iface, source, page, pageSize]
   );
 
   const load = useCallback(async () => {
@@ -139,11 +145,19 @@ export default function LogCenter({ source }: { source: logs.LogSource }) {
     void load();
   }, [load]);
 
-  // 切换日志源时重置筛选/分页。
+  // 切换日志源时重置筛选/分页；dialup 源从 url ?iface= 初始化线路（诊断面板「查看完整历史」跳转带来）。
   useEffect(() => {
     setPage(1);
     setKeyword('');
     setRange(null);
+    setIface(source === 'dialup' ? (searchParams.get('iface') || undefined) : undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source]);
+
+  // dialup 线路下拉选项：取 WAN 接口列表（值用接口 name，后端 Contains 匹配 pppoe-<name>）。
+  useEffect(() => {
+    if (source !== 'dialup') return;
+    net.getNetOverview().then((d) => setWans(d.wans || [])).catch(() => {});
   }, [source]);
 
   const onClear = async () => {
@@ -172,6 +186,14 @@ export default function LogCenter({ source }: { source: logs.LogSource }) {
       toolbar={
         <>
           <Space wrap>
+            {source === 'dialup' && (
+              <Select
+                style={{ width: 150 }}
+                value={iface ?? ''}
+                onChange={(v) => { setIface(v || undefined); setPage(1); }}
+                options={[{ value: '', label: '全部线路' }, ...wans.map((w) => ({ value: w.name, label: w.name }))]}
+              />
+            )}
             <RangePicker showTime value={range as never} onChange={(v) => setRange(v as never)} placeholder={['开始时间', '结束时间']} />
             <Input.Search allowClear placeholder="搜索事件" style={{ width: 220 }} value={keyword} onChange={(e) => setKeyword(e.target.value)} onSearch={() => { setPage(1); void load(); }} />
           </Space>

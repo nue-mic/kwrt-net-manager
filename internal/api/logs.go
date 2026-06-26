@@ -37,6 +37,7 @@ func (h *LogHandler) filter(r *http.Request) logcenter.Filter {
 		Start:    atoi(q.Get("start")),
 		End:      atoi(q.Get("end")),
 		Keyword:  q.Get("keyword"),
+		Iface:    q.Get("iface"),
 		Page:     page,
 		PageSize: size,
 	}

@@ -10,7 +10,7 @@ import {
   FileSearchOutlined,
 } from '@ant-design/icons';
 import PageCard from '../components/PageCard';
-import DialLogConsole from '../components/DialLogConsole';
+import DialDiagnosticDrawer from '../components/dial/DialDiagnosticDrawer';
 import { useNetData, extractErr } from '../hooks/useNetData';
 import * as net from '../api/netcfg';
 
@@ -46,6 +46,8 @@ export default function NetOverview() {
   const [installing, setInstalling] = useState(false);
 
   const [drawer, setDrawer] = useState<{ open: boolean; role: 'lan' | 'wan'; editing: net.NetIface | null }>({ open: false, role: 'lan', editing: null });
+  // 拨号诊断面板（顶层，跨编辑抽屉存活）：保存 PPPoE / 点重拨后弹出。
+  const [dialPanel, setDialPanel] = useState<{ iface: string; name: string } | null>(null);
 
   const loadAux = () => {
     net.listNICs().then(setNics).catch(() => {});
@@ -208,9 +210,23 @@ export default function NetOverview() {
         live={liveIface}
         nics={nics}
         onClose={() => setDrawer((d) => ({ ...d, open: false }))}
-        onSaved={() => { setDrawer((d) => ({ ...d, open: false })); reload(); }}
+        onSaved={(saved, opts) => {
+          setDrawer((d) => ({ ...d, open: false }));
+          reload();
+          if (opts.dial) setDialPanel({ iface: saved.id, name: saved.name });
+        }}
         onAction={onAction}
         onDelete={onDelete}
+        onOpenDial={(ifc) => setDialPanel({ iface: ifc.id, name: ifc.name })}
+      />
+
+      {/* 顶层拨号诊断面板：保存 PPPoE / 重拨后弹出，独立于编辑抽屉存活 */}
+      <DialDiagnosticDrawer
+        open={!!dialPanel}
+        iface={dialPanel?.iface}
+        name={dialPanel?.name}
+        onClose={() => setDialPanel(null)}
+        onRedial={dialPanel ? () => onAction(dialPanel.iface, 'restart') : undefined}
       />
     </PageCard>
   );
@@ -333,17 +349,17 @@ interface DrawerProps {
   live: net.NetIface | null; // 该接口的最新运行态（来自 data，独立于 editing 快照）
   nics: net.NIC[];
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (saved: net.NetIface, opts: { dial: boolean }) => void;
   onAction: (id: string, action: 'connect' | 'disconnect' | 'restart') => void;
   onDelete: (id: string) => void;
+  onOpenDial: (iface: net.NetIface) => void;
 }
 
-function IfaceDrawer({ open, role, editing, live, nics, onClose, onSaved, onAction, onDelete }: DrawerProps) {
+function IfaceDrawer({ open, role, editing, live, nics, onClose, onSaved, onAction, onDelete, onOpenDial }: DrawerProps) {
   const { message } = App.useApp();
   const navigate = useNavigate();
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
-  const [dialOpen, setDialOpen] = useState(false); // 拨号日志 Modal
   const proto = Form.useWatch('proto', form) as string | undefined;
   // peerdns 开关（仅 WAN dhcp/pppoe 有意义）：开=用上游下发的 DNS；关=露出自定义 DNS 列表。
   const peerdns = Form.useWatch('peerdns', form) as boolean | undefined;
@@ -451,13 +467,20 @@ function IfaceDrawer({ open, role, editing, live, nics, onClose, onSaved, onActi
       keepalive: v.keepalive || '',
       pppoe_ipv6: v.pppoe_ipv6,
     };
+    // 仅 PPPoE 且账号/密码/接入方式变动(或新建即 pppoe)时，保存后弹拨号诊断面板。
+    const shouldDial =
+      body.proto === 'pppoe' && (
+        !editing ||
+        editing.proto !== 'pppoe' ||
+        body.username !== editing.username ||
+        body.password !== editing.password
+      );
     setSaving(true);
     try {
-      if (editing) await net.updateNetIface(editing.id, body);
-      else await net.createNetIface(body);
+      const saved = editing ? await net.updateNetIface(editing.id, body) : await net.createNetIface(body);
       if (ipChanged) message.success(`已保存，若无法访问请用新地址 ${v.ipaddr} 打开`);
       else message.success('已保存（已下发并重载网络）');
-      onSaved();
+      onSaved(saved, { dial: shouldDial });
     } catch (e) {
       message.error('保存失败：' + extractErr(e));
     } finally {
@@ -475,19 +498,11 @@ function IfaceDrawer({ open, role, editing, live, nics, onClose, onSaved, onActi
       onClose={onClose}
       destroyOnClose
       extra={
-        <Space>
-          {editing && role === 'wan' && (
-            <>
-              <Button size="small" onClick={() => onAction(editing.id, 'disconnect')}>断开</Button>
-              <Button size="small" type="primary" icon={<PoweroffOutlined />} onClick={() => onAction(editing.id, 'restart')}>重拨</Button>
-            </>
-          )}
-          {editing && (
-            <Popconfirm title={`删除接口 ${editing.name}？`} onConfirm={() => { onDelete(editing.id); onClose(); }}>
-              <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
-            </Popconfirm>
-          )}
-        </Space>
+        editing && (
+          <Popconfirm title={`删除接口 ${editing.name}？`} onConfirm={() => { onDelete(editing.id); onClose(); }}>
+            <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
+          </Popconfirm>
+        )
       }
       footer={
         <Space>
@@ -693,11 +708,13 @@ function IfaceDrawer({ open, role, editing, live, nics, onClose, onSaved, onActi
           <Form.Item label="运行状态">
             <Space wrap>
               {/* 运行态取最新 live（断开/重拨/轮询后会刷新），回退到 editing 快照；
-                  三态：已连接 / 拨号中(获取地址中) / 未连接 */}
+                  三态：已连接 / 拨号中(获取地址中) / 未连接。断开/重拨/拨号诊断集中一行（对齐爱快）。 */}
               <ConnBadge iface={live ?? editing} asTag />
               {(live?.runtime_ip ?? editing.runtime_ip) && <Text>当前 IP：{live?.runtime_ip ?? editing.runtime_ip}</Text>}
-              <Button size="small" type="link" icon={<FileSearchOutlined />} onClick={() => setDialOpen(true)} style={{ paddingInline: 0 }}>
-                查看拨号日志
+              <Button size="small" onClick={() => onAction(editing.id, 'disconnect')}>断开</Button>
+              <Button size="small" type="primary" icon={<PoweroffOutlined />} onClick={() => { onAction(editing.id, 'restart'); onOpenDial(editing); }}>重拨</Button>
+              <Button size="small" type="link" icon={<FileSearchOutlined />} onClick={() => onOpenDial(editing)} style={{ paddingInline: 0 }}>
+                拨号诊断
               </Button>
             </Space>
           </Form.Item>
@@ -743,21 +760,6 @@ function IfaceDrawer({ open, role, editing, live, nics, onClose, onSaved, onActi
           </Tooltip>
         </Paragraph>
       </Form>
-
-      {/* 拨号实时日志：把 pppd 报错翻成人话+建议，点「重拨」后可立刻看拨号过程与失败原因 */}
-      {editing && role === 'wan' && (
-        <Modal
-          title={`拨号日志 · ${editing.name}`}
-          open={dialOpen}
-          onCancel={() => setDialOpen(false)}
-          footer={null}
-          width="min(94vw, 860px)"
-          styles={{ body: { height: '62vh' } }}
-          destroyOnHidden
-        >
-          <DialLogConsole iface={editing.id} />
-        </Modal>
-      )}
     </Drawer>
   );
 }

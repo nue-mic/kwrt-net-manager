@@ -120,6 +120,7 @@ type Filter struct {
 	Start    int64  // unix 秒，0=不限
 	End      int64  // unix 秒，0=不限
 	Keyword  string // 在所有文本字段里子串匹配
+	Iface    string // 仅 dialup 源生效：按接口名子串过滤(全部线路=空)；接口名为空的行保留
 	Page     int    // 1-based
 	PageSize int
 }
@@ -199,12 +200,18 @@ func (c *Center) Query(source string, f Filter) (Result, error) {
 	}
 
 	kw := strings.ToLower(strings.TrimSpace(f.Keyword))
+	iface := strings.TrimSpace(f.Iface)
 	filtered := make([]Entry, 0, len(all))
 	for _, e := range all {
 		if f.Start > 0 && e.TS > 0 && e.TS < f.Start {
 			continue
 		}
 		if f.End > 0 && e.TS > 0 && e.TS > f.End {
+			continue
+		}
+		// 线路过滤(仅 dialup)：只滤掉明确属于其它接口的行；接口名为空(很多 pppd 行抽不到)的保留，
+		// 与 Diagnose 同款语义，避免误丢相关行。
+		if source == SourceDialup && iface != "" && e.Iface != "" && !strings.Contains(e.Iface, iface) {
 			continue
 		}
 		if kw != "" && !entryMatch(e, kw) {

@@ -55,6 +55,7 @@ export interface LogQuery {
   start?: number; // unix 秒
   end?: number;
   keyword?: string;
+  iface?: string; // 仅 dialup 源：按线路(接口)过滤，空=全部线路
   page?: number; // 1-based
   page_size?: number;
 }
@@ -98,6 +99,7 @@ export function exportLogsURL(source: LogSource, q: LogQuery): string {
   if (q.start) p.set('start', String(q.start));
   if (q.end) p.set('end', String(q.end));
   if (q.keyword) p.set('keyword', q.keyword);
+  if (q.iface) p.set('iface', q.iface);
   return `/api/v1/logs/${source}/export?${p.toString()}`;
 }
 

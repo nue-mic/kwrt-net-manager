@@ -708,14 +708,19 @@ function IfaceDrawer({ open, role, editing, live, nics, onClose, onSaved, onActi
           <Form.Item label="运行状态">
             <Space wrap>
               {/* 运行态取最新 live（断开/重拨/轮询后会刷新），回退到 editing 快照；
-                  三态：已连接 / 拨号中(获取地址中) / 未连接。断开/重拨/拨号诊断集中一行（对齐爱快）。 */}
+                  三态：已连接 / 拨号中(获取地址中) / 未连接。状态+IP 所有 WAN 都显示，
+                  断开/重拨/拨号诊断是「拨号」语义，仅 PPPoE 才有（DHCP 自动获址、静态无拨号）。 */}
               <ConnBadge iface={live ?? editing} asTag />
               {(live?.runtime_ip ?? editing.runtime_ip) && <Text>当前 IP：{live?.runtime_ip ?? editing.runtime_ip}</Text>}
-              <Button size="small" onClick={() => onAction(editing.id, 'disconnect')}>断开</Button>
-              <Button size="small" type="primary" icon={<PoweroffOutlined />} onClick={() => { onAction(editing.id, 'restart'); onOpenDial(editing); }}>重拨</Button>
-              <Button size="small" type="link" icon={<FileSearchOutlined />} onClick={() => onOpenDial(editing)} style={{ paddingInline: 0 }}>
-                拨号诊断
-              </Button>
+              {proto === 'pppoe' && (
+                <>
+                  <Button size="small" onClick={() => onAction(editing.id, 'disconnect')}>断开</Button>
+                  <Button size="small" type="primary" icon={<PoweroffOutlined />} onClick={() => { onAction(editing.id, 'restart'); onOpenDial(editing); }}>重拨</Button>
+                  <Button size="small" type="link" icon={<FileSearchOutlined />} onClick={() => onOpenDial(editing)} style={{ paddingInline: 0 }}>
+                    拨号诊断
+                  </Button>
+                </>
+              )}
             </Space>
           </Form.Item>
         )}

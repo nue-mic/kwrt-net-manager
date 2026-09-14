@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import PageCard from '../components/PageCard';
 import { useNetData, extractErr } from '../hooks/useNetData';
 import * as net from '../api/netcfg';
+import { cmpIp, cmpText } from '../utils/sort';
 
 const ALL = '__all__';
 
@@ -17,19 +18,6 @@ function formatRemaining(seconds: number): string {
   const s = total % 60;
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${pad(h)}:${pad(m)}:${pad(s)}`;
-}
-
-/** IPv4 转 32 位整数用于排序；非法/非 IPv4 返回 -1（排在最前）。 */
-function ipToNum(ip: string): number {
-  const parts = (ip || '').split('.');
-  if (parts.length !== 4) return -1;
-  let n = 0;
-  for (const p of parts) {
-    const v = Number(p);
-    if (p === '' || !Number.isInteger(v) || v < 0 || v > 255) return -1;
-    n = n * 256 + v;
-  }
-  return n;
 }
 
 /** 排序用的剩余秒数：静态/永久当作最大值（升序排在所有动态租约之后）。 */
@@ -177,7 +165,7 @@ export default function DhcpLeasesPage() {
       title: '主机名称',
       dataIndex: 'hostname',
       key: 'hostname',
-      sorter: (a, b) => (a.hostname || '').localeCompare(b.hostname || '', 'zh'),
+      sorter: (a, b) => cmpText(a.hostname, b.hostname),
       sortDirections: ['ascend', 'descend'],
       render: (v: string) => v || '-',
     },
@@ -186,7 +174,7 @@ export default function DhcpLeasesPage() {
       dataIndex: 'ip',
       key: 'ip',
       // 点击表头按 IP 数值（非字符串）正序/倒序排列。
-      sorter: (a, b) => ipToNum(a.ip) - ipToNum(b.ip),
+      sorter: (a, b) => cmpIp(a.ip, b.ip),
       sortDirections: ['ascend', 'descend'],
       showSorterTooltip: { title: '点击按终端 IP 正序 / 倒序排列' },
     },
@@ -194,7 +182,7 @@ export default function DhcpLeasesPage() {
       title: '终端 MAC',
       dataIndex: 'mac',
       key: 'mac',
-      sorter: (a, b) => (a.mac || '').toUpperCase().localeCompare((b.mac || '').toUpperCase()),
+      sorter: (a, b) => cmpText(a.mac.toUpperCase(), b.mac.toUpperCase()),
       sortDirections: ['ascend', 'descend'],
     },
     {

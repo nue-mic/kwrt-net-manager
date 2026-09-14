@@ -22,6 +22,10 @@ import { useSearchParams } from 'react-router-dom';
 import PageCard from '../components/PageCard';
 import { useNetData, extractErr } from '../hooks/useNetData';
 import * as net from '../api/netcfg';
+import { cmpIp, cmpText } from '../utils/sort';
+
+/** 点击表头：升序 → 降序 → 取消（回到后端返回的原顺序）。 */
+const SORT_DIRS: ('ascend' | 'descend')[] = ['ascend', 'descend'];
 
 interface StaticForm {
   hostname: string;
@@ -202,11 +206,42 @@ export default function DhcpStaticsPage() {
   };
 
   const columns: ColumnsType<net.StaticLease> = [
-    { title: '主机名称', dataIndex: 'hostname', ellipsis: true, render: (v: string) => v || '-' },
-    { title: '绑定IP', dataIndex: 'ip' },
-    { title: '绑定MAC', dataIndex: 'mac' },
-    { title: '网关', dataIndex: 'gateway', render: (v: string) => v || '-' },
-    { title: '绑定接口', dataIndex: 'interface', render: (v: string) => v || '-' },
+    {
+      title: '主机名称',
+      dataIndex: 'hostname',
+      ellipsis: true,
+      sorter: (a, b) => cmpText(a.hostname, b.hostname),
+      sortDirections: SORT_DIRS,
+      render: (v: string) => v || '-',
+    },
+    {
+      title: '绑定IP',
+      dataIndex: 'ip',
+      // 按 IP 数值（非字符串）正序/倒序排列。
+      sorter: (a, b) => cmpIp(a.ip, b.ip),
+      sortDirections: SORT_DIRS,
+      showSorterTooltip: { title: '点击按绑定 IP 正序 / 倒序排列' },
+    },
+    {
+      title: '绑定MAC',
+      dataIndex: 'mac',
+      sorter: (a, b) => cmpText(a.mac.toUpperCase(), b.mac.toUpperCase()),
+      sortDirections: SORT_DIRS,
+    },
+    {
+      title: '网关',
+      dataIndex: 'gateway',
+      sorter: (a, b) => cmpIp(a.gateway, b.gateway),
+      sortDirections: SORT_DIRS,
+      render: (v: string) => v || '-',
+    },
+    {
+      title: '绑定接口',
+      dataIndex: 'interface',
+      sorter: (a, b) => cmpText(a.interface, b.interface),
+      sortDirections: SORT_DIRS,
+      render: (v: string) => v || '-',
+    },
     { title: '首选DNS', dataIndex: 'dns_primary', render: (v: string) => v || '-' },
     { title: '备选DNS', dataIndex: 'dns_secondary', render: (v: string) => v || '-' },
     { title: '备注', dataIndex: 'remark', ellipsis: true, render: (v: string) => v || '-' },
@@ -220,6 +255,8 @@ export default function DhcpStaticsPage() {
       title: '状态',
       dataIndex: 'enabled',
       width: 90,
+      sorter: (a, b) => Number(a.enabled) - Number(b.enabled),
+      sortDirections: SORT_DIRS,
       render: (enabled: boolean) =>
         enabled ? <Tag color="success">已启用</Tag> : <Tag>已停用</Tag>,
     },

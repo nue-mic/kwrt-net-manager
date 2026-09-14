@@ -43,6 +43,8 @@ export default function SpeedtestPage() {
   const [installing, setInstalling] = useState(false);
   const [starting, setStarting] = useState(false);
   const timer = useRef<number | null>(null);
+  // 标记「当前后台任务是安装」，好在 poll 收尾时给出安装成败提示（poll 是稳定闭包，读不到最新 state）。
+  const installingRef = useRef(false);
 
   const loadSvc = async () => {
     try {
@@ -80,6 +82,12 @@ export default function SpeedtestPage() {
       } else if (timer.current) {
         window.clearInterval(timer.current);
         timer.current = null;
+        if (installingRef.current) {
+          installingRef.current = false;
+          setInstalling(false);
+          if (s.phase === 'error') message.error('安装失败：' + (s.error || s.message));
+          else message.success('测速组件安装完成');
+        }
         void loadHistory();
         void loadSvc();
         void loadServers();
@@ -87,7 +95,7 @@ export default function SpeedtestPage() {
     } catch {
       /* 忽略 */
     }
-  }, []);
+  }, [message]);
 
   useEffect(() => {
     void loadSvc();
@@ -112,17 +120,18 @@ export default function SpeedtestPage() {
     }
   };
 
+  // 安装是后台任务：这里只负责触发 + 进入轮询，成败由 poll() 在任务结束时提示
+  // （装包动辄 1~3 分钟，同步等会被请求超时打断，看着失败其实装成功了）。
   const onInstall = async () => {
     setInstalling(true);
+    installingRef.current = true;
     try {
-      await st.installSpeedtest();
-      message.success('测速组件安装完成');
-      void loadSvc();
-      void loadServers();
+      setStatus(await st.installSpeedtest());
+      void poll();
     } catch (e) {
-      message.error('安装失败：' + extractErr(e));
-    } finally {
+      installingRef.current = false;
       setInstalling(false);
+      message.error('安装失败：' + extractErr(e));
     }
   };
 
@@ -244,7 +253,7 @@ export default function SpeedtestPage() {
         />
       )}
       {!running && status?.phase === 'error' && status?.error && (
-        <Alert type="error" showIcon style={{ marginBottom: 12 }} message="测速失败" description={status.error} />
+        <Alert type="error" showIcon style={{ marginBottom: 12 }} message={status.message || '测速失败'} description={status.error} />
       )}
 
       {/* 本次结果对比表 */}

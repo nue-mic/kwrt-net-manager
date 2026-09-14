@@ -87,7 +87,8 @@ export async function saveDNSDoH(body: DNSDoH): Promise<DNSDoH> {
   return data;
 }
 export async function installDoH(): Promise<{ output: string }> {
-  const { data } = await client.post('/api/v1/dns/doh/install');
+  // 同 speedtest：装包耗时远超全局 15s 默认超时，否则后端装得好好的前端先报超时。
+  const { data } = await client.post('/api/v1/dns/doh/install', null, { timeout: 180000 });
   return data;
 }
 export async function getDNSService(): Promise<DNSSvcInfo> {

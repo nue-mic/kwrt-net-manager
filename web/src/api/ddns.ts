@@ -70,6 +70,7 @@ export async function listDDNSDevices(): Promise<DDNSDevice[]> {
   return data.items ?? [];
 }
 export async function installDDNS(): Promise<{ output: string }> {
-  const { data } = await client.post('/api/v1/ddns/install');
+  // 同 speedtest：装包耗时远超全局 15s 默认超时，否则后端装得好好的前端先报超时。
+  const { data } = await client.post('/api/v1/ddns/install', null, { timeout: 180000 });
   return data;
 }

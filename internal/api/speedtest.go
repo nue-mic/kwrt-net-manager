@@ -96,11 +96,12 @@ func (h *SpeedtestHandler) Service(w http.ResponseWriter, r *http.Request) {
 }
 
 // Install POST /api/v1/speedtest/install — 一键安装 speedtest-go。
+// 异步：立即返回当前运行态，装的进度/结果由 GET /speedtest/status 轮询（装包动辄
+// 1~3 分钟，同步返回必被前端超时打断，看着失败其实装成功了）。
 func (h *SpeedtestHandler) Install(w http.ResponseWriter, r *http.Request) {
-	out, err := h.svc.Install()
-	if err != nil {
-		WriteError(w, http.StatusInternalServerError, CodeInternal, "安装测速组件失败："+err.Error(), map[string]any{"output": out})
+	if err := h.svc.StartInstall(); err != nil {
+		WriteError(w, http.StatusConflict, CodeBadRequest, err.Error(), nil)
 		return
 	}
-	WriteJSON(w, http.StatusOK, map[string]any{"output": out})
+	WriteJSON(w, http.StatusAccepted, h.svc.Status())
 }

@@ -77,7 +77,8 @@ export async function getSpeedtestService(): Promise<SpeedtestSvcInfo> {
   const { data } = await client.get('/api/v1/speedtest/service');
   return data;
 }
-export async function installSpeedtest(): Promise<{ output: string }> {
+/** 触发安装：后端后台装，立即返回运行态；装的进度/结果靠轮询 status。 */
+export async function installSpeedtest(): Promise<SpeedtestStatus> {
   const { data } = await client.post('/api/v1/speedtest/install');
   return data;
 }

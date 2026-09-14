@@ -129,9 +129,55 @@ func (s *Service) installed() bool {
 	return err == nil
 }
 
-// Install 一键安装 speedtest-go（自愈回退源）。
+// Install 一键安装 speedtest-go。四级自愈：
+// 包管理器默认源 → 国内镜像(USTC) → 官方源（以上由 pkgmgr 负责）→ 按 CPU 架构
+// 直接拉官方静态二进制。最后一级救的是「软件源里压根没有这个包」的精简固件。
 func (s *Service) Install() (string, error) {
-	return pkgmgr.Install(s.run, "speedtest-go")
+	out, err := pkgmgr.Install(s.run, "speedtest-go")
+	if err == nil {
+		return out, nil
+	}
+	logs := strings.TrimSpace(out)
+	logs += "\n\n=== 包管理器安装失败（" + err.Error() + "），改为直接下载二进制 ===\n"
+	out2, err2 := s.installBinary()
+	logs += strings.TrimSpace(out2)
+	if err2 != nil {
+		return logs, errors.New("包管理器与二进制直装均失败：" + err2.Error())
+	}
+	return logs, nil
+}
+
+// StartInstall 起一个后台安装任务并立即返回，进度经 Status() 的 phase/message 暴露。
+// 为什么不同步装：opkg update 光刷新索引在路由器上就要十几秒，加上下载常达 1~3 分钟，
+// 同步等必然被前端请求超时打断——那时后端其实还在正常安装，用户却看到「安装失败」。
+func (s *Service) StartInstall() error {
+	s.mu.Lock()
+	if s.st.Running && time.Since(s.startedAt) < staleGuard(0) {
+		s.mu.Unlock()
+		return errors.New("已有任务正在进行中，请稍候")
+	}
+	s.gen++
+	gen := s.gen
+	s.st = Status{Phase: "installing", Running: true, Message: "正在安装测速组件…", StartedAt: s.now()}
+	s.startedAt = time.Now()
+	s.mu.Unlock()
+
+	go func() {
+		out, err := s.Install()
+		s.withGen(gen, func() {
+			s.st.Running = false
+			s.st.FinishedAt = s.now()
+			if err != nil {
+				s.st.Phase = "error"
+				s.st.Message = "安装测速组件失败"
+				s.st.Error = strings.TrimSpace(lastLine(out) + " " + err.Error())
+				return
+			}
+			s.st.Phase = "done"
+			s.st.Message = "测速组件安装完成"
+		})
+	}()
+	return nil
 }
 
 // Servers 列出附近节点并标记智能默认勾选（供前端节点选择器）。未装则报错。

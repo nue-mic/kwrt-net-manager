@@ -925,9 +925,17 @@ paths:
   /api/v1/speedtest/install:
     post:
       tags: [speedtest]
-      summary: 一键安装 speedtest-go（自愈回退源）
+      summary: 一键安装 speedtest-go（异步；四级自愈：默认源→USTC→官方源→二进制直装）
+      description: >-
+        立即返回当前运行态，安装在后台进行；进度与结果轮询 GET /api/v1/speedtest/status
+        （phase: installing → done|error）。
       responses:
-        "200": { description: OK }
+        "202":
+          description: 已开始安装
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpeedtestStatus" }
+        "409": { description: 已有任务正在进行中 }
   /api/v1/speedtest/history:
     get:
       tags: [speedtest]

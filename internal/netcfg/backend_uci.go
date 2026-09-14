@@ -75,7 +75,7 @@ func (b *uciBackend) SaveDHCPServers(list []DHCPServer) error {
 	// 界面上没了，UCI 里的老地址池还在照发地址（典型症状：删掉旧网段、新建一个新
 	// 网段的服务端，新网段死活不生效）。这里 diff 出被删的未托管节，交给 apply()
 	// 把它的 v4 地址池撤掉。
-	old, _ := b.storeBackend.DHCPServers()
+	old, _ := b.DHCPServers() // 旁车当前值（uciBackend 不覆盖读方法）
 	if err := b.storeBackend.SaveDHCPServers(list); err != nil {
 		return err
 	}

@@ -39,6 +39,11 @@ type uciBackend struct {
 	applyMu       sync.Mutex
 	pending       bool
 	pendingMsg    string
+	// dropStock holds UCI section names of imported-but-unadopted `config dhcp`
+	// sections the operator has just deleted in the UI. They carry no marker, so
+	// the GC never touches them — apply() must retire their IPv4 pool explicitly
+	// or the deleted pool keeps handing out addresses. See SaveDHCPServers.
+	dropStock []string
 }
 
 func newUCIBackend(run runner, sidecar string, log *slog.Logger) (*uciBackend, error) {
@@ -66,8 +71,22 @@ func (b *uciBackend) Kind() string { return KindUCI }
 // ---- write methods: persist sidecar, then project to UCI ----
 
 func (b *uciBackend) SaveDHCPServers(list []DHCPServer) error {
+	// 删掉一个「导入但从未编辑过」的池时，它没有 managed 标记，GC 不会碰它 ——
+	// 界面上没了，UCI 里的老地址池还在照发地址（典型症状：删掉旧网段、新建一个新
+	// 网段的服务端，新网段死活不生效）。这里 diff 出被删的未托管节，交给 apply()
+	// 把它的 v4 地址池撤掉。
+	old, _ := b.storeBackend.DHCPServers()
 	if err := b.storeBackend.SaveDHCPServers(list); err != nil {
 		return err
+	}
+	keep := make(map[string]bool, len(list))
+	for _, s := range list {
+		keep[s.ID] = true
+	}
+	for _, s := range old {
+		if !s.Managed && !keep[s.ID] {
+			b.dropStock = append(b.dropStock, uciName(s.ID))
+		}
 	}
 	return b.apply()
 }
@@ -188,6 +207,17 @@ func (b *uciBackend) apply() error {
 	existDhcp := b.managedNames("dhcp")
 	existNet := b.managedNames("network")
 
+	// dnsmasq 的 `option ignore` 是按【网卡】生效的（init 把它翻译成
+	// no-dhcp-interface=<device>），不是按池生效；同一网卡上多个 dhcp-range 也会互相
+	// 顶掉。所以凡是本工具已在某网卡上启用了池的，这块网卡的 v4 DHCP 就以该池为准：
+	// 同网卡上其它池/残留节既不能留 ignore，也不能留自己的地址池。
+	enabledIfaces := map[string]bool{}
+	for _, s := range servers {
+		if s.Managed && s.Enabled && s.Interface != "" {
+			enabledIfaces[s.Interface] = true
+		}
+	}
+
 	keepDhcp := map[string]bool{}
 	anyDHCPEnabled := false
 	var d strings.Builder
@@ -201,8 +231,15 @@ func (b *uciBackend) apply() error {
 		fmt.Fprintf(&d, "set dhcp.%s=dhcp\n", id)
 		fmt.Fprintf(&d, "set dhcp.%s.%s='%s'\n", id, managedOpt, managedMarker)
 		fmt.Fprintf(&d, "set dhcp.%s.interface='%s'\n", id, s.Interface)
-		fmt.Fprintf(&d, "set dhcp.%s.start='%d'\n", id, start)
-		fmt.Fprintf(&d, "set dhcp.%s.limit='%d'\n", id, limit)
+		// 地址池范围：停用的池若与一个启用的池同网卡，必须把 start/limit 撤掉——
+		// 那时不能用 ignore 停它（见下），留着范围 dnsmasq 就照发这段地址。
+		if s.Enabled || !enabledIfaces[s.Interface] {
+			fmt.Fprintf(&d, "set dhcp.%s.start='%d'\n", id, start)
+			fmt.Fprintf(&d, "set dhcp.%s.limit='%d'\n", id, limit)
+		} else {
+			fmt.Fprintf(&d, "delete dhcp.%s.start\n", id)
+			fmt.Fprintf(&d, "delete dhcp.%s.limit\n", id)
+		}
 		if s.LeaseMinutes <= 0 {
 			fmt.Fprintf(&d, "set dhcp.%s.leasetime='infinite'\n", id) // 0=永久
 		} else {
@@ -222,6 +259,10 @@ func (b *uciBackend) apply() error {
 			// web "启用" into a real DHCP server across both backends.
 			fmt.Fprintf(&d, "set dhcp.%s.dhcpv4='server'\n", id)
 			anyDHCPEnabled = true
+		} else if enabledIfaces[s.Interface] {
+			// 同网卡另有启用的池：ignore 会把整块网卡的 DHCP 一起关掉（连那个启用
+			// 的池也不发地址），所以这里只撤范围、不写 ignore。
+			fmt.Fprintf(&d, "delete dhcp.%s.ignore\n", id)
 		} else {
 			fmt.Fprintf(&d, "set dhcp.%s.ignore='1'\n", id)
 		}
@@ -350,6 +391,35 @@ func (b *uciBackend) apply() error {
 			fmt.Fprintf(&d, "delete dhcp.%s\n", n)
 		}
 	}
+	// 未托管（stock/LuCI/运维手改）的 `config dhcp` 节：只在两种情况下动它，且只动
+	// v4 池的三个键——不删节、不碰 dhcpv6/ra/ip6assign 等（整节删掉会连带停掉该网卡
+	// 的 IPv6 下发）：
+	//   1) 用户刚在界面上删除了这个导入节（dropStock）→ 撤掉它的地址池并 ignore 掉，
+	//      否则"删了却还在发地址"；
+	//   2) 它与一个本工具启用的池同网卡 → 它残留的 ignore / 旧网段地址池会顶掉用户
+	//      新建的池（删旧建新后新网段不生效的根因）。
+	if show, err := b.uciShow("dhcp"); err == nil {
+		drop := toSet(b.dropStock)
+		for _, s := range parseUci(show, "dhcp") {
+			if s.typ != "dhcp" || keepDhcp[s.name] || existDhcp[s.name] {
+				continue
+			}
+			iface := first(s.opts["interface"])
+			switch {
+			case drop[s.name]:
+				fmt.Fprintf(&d, "delete dhcp.%s.start\n", s.name)
+				fmt.Fprintf(&d, "delete dhcp.%s.limit\n", s.name)
+				if !enabledIfaces[iface] {
+					fmt.Fprintf(&d, "set dhcp.%s.ignore='1'\n", s.name)
+				}
+			case iface != "" && enabledIfaces[iface]:
+				fmt.Fprintf(&d, "delete dhcp.%s.ignore\n", s.name)
+				fmt.Fprintf(&d, "delete dhcp.%s.start\n", s.name)
+				fmt.Fprintf(&d, "delete dhcp.%s.limit\n", s.name)
+			}
+		}
+	}
+	b.dropStock = nil
 	// Multi-backend DHCPv4 server selection — only ever touch an existing odhcpd section:
 	//   - odhcpd-only box (no dnsmasq): a pool only serves once odhcpd is the main
 	//     DHCPv4 server, so flip maindhcp on when a pool is enabled.

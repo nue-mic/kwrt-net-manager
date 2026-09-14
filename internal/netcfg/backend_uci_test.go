@@ -631,3 +631,94 @@ func TestManagedSectionsParsing(t *testing.T) {
 		t.Errorf("managedSections = %v", got)
 	}
 }
+
+func TestUCIDisabledPoolDoesNotKillSiblingOnSameIface(t *testing.T) {
+	// `option ignore` is per-INTERFACE in dnsmasq (no-dhcp-interface=<dev>), so a
+	// disabled pool must not set it while another pool on the same interface is
+	// enabled — it would take the enabled pool down with it. It must drop its own
+	// range instead, or dnsmasq keeps serving the disabled pool's addresses.
+	f := &fakeRunner{
+		show: map[string]string{"dhcp": "", "network": sampleNetShow},
+		get:  map[string]string{"network.lan.ipaddr": "192.168.1.1", "network.lan.netmask": "255.255.255.0"},
+	}
+	be := newTestUCI(t, f)
+	svc := NewService(be, nil, nil)
+	n := 0
+	svc.idFn = func(p string) string { n++; return fmt.Sprintf("%s_%d", p, n) }
+	if _, err := svc.CreateDHCPServer(DHCPServer{
+		Interface: "lan", Enabled: true, IPStart: "192.168.1.100", IPEnd: "192.168.1.200", LeaseMinutes: 120,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	old, err := svc.CreateDHCPServer(DHCPServer{
+		Interface: "lan", Enabled: false, IPStart: "192.168.1.210", IPEnd: "192.168.1.220", LeaseMinutes: 120,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dhcp := f.batchContaining("commit dhcp")
+	for _, w := range []string{
+		"delete dhcp." + old.ID + ".ignore",
+		"delete dhcp." + old.ID + ".start",
+		"delete dhcp." + old.ID + ".limit",
+		"set dhcp.dhcp_1.start='100'", // the enabled pool keeps its range
+	} {
+		if !strings.Contains(dhcp, w) {
+			t.Errorf("batch missing %q\n--- batch ---\n%s", w, dhcp)
+		}
+	}
+	if strings.Contains(dhcp, "set dhcp."+old.ID+".ignore='1'") {
+		t.Errorf("disabled pool must not ignore an interface that still has an enabled pool\n--- batch ---\n%s", dhcp)
+	}
+}
+
+func TestUCIStockSectionYieldsToEnabledPool(t *testing.T) {
+	// A stock/LuCI `config dhcp` section on the same interface (here: ignore='1'
+	// plus an old 192.168.1.x range) silently kills a pool created in the UI.
+	// apply() must clear its ignore + range — but never delete the section, which
+	// also carries the interface's IPv6 (ra/dhcpv6) config.
+	f := &fakeRunner{
+		show: map[string]string{"dhcp": sampleDHCPShow, "network": sampleNetShow},
+		get:  map[string]string{"network.lan.ipaddr": "192.168.1.1", "network.lan.netmask": "255.255.255.0"},
+	}
+	be := newTestUCI(t, f) // fresh → imports stock dhcp.lan as unmanaged
+	svc := NewService(be, nil, nil)
+	svc.idFn = func(p string) string { return p + "_new" }
+	if _, err := svc.CreateDHCPServer(DHCPServer{
+		Interface: "lan", Enabled: true, IPStart: "192.168.1.30", IPEnd: "192.168.1.254", LeaseMinutes: 120,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	dhcp := f.batchContaining("commit dhcp")
+	for _, w := range []string{"delete dhcp.lan.ignore", "delete dhcp.lan.start", "delete dhcp.lan.limit"} {
+		if !strings.Contains(dhcp, w) {
+			t.Errorf("stock-section cleanup missing %q\n--- batch ---\n%s", w, dhcp)
+		}
+	}
+	if strings.Contains(dhcp, "delete dhcp.lan\n") {
+		t.Errorf("must not delete the stock section (holds IPv6 config)\n--- batch ---\n%s", dhcp)
+	}
+}
+
+func TestUCIDeleteImportedStockPoolRetiresItsRange(t *testing.T) {
+	// Deleting an imported-but-never-edited pool has to retire it in UCI too;
+	// it carries no marker, so the GC alone would leave it serving addresses.
+	f := &fakeRunner{
+		show: map[string]string{"dhcp": sampleDHCPShow, "network": sampleNetShow},
+		get:  map[string]string{"network.lan.ipaddr": "192.168.1.1", "network.lan.netmask": "255.255.255.0"},
+	}
+	be := newTestUCI(t, f)
+	svc := NewService(be, nil, nil)
+	if err := svc.DeleteDHCPServer("lan"); err != nil {
+		t.Fatal(err)
+	}
+	dhcp := f.batchContaining("commit dhcp")
+	for _, w := range []string{"delete dhcp.lan.start", "delete dhcp.lan.limit", "set dhcp.lan.ignore='1'"} {
+		if !strings.Contains(dhcp, w) {
+			t.Errorf("deleted stock pool not retired, missing %q\n--- batch ---\n%s", w, dhcp)
+		}
+	}
+	if strings.Contains(dhcp, "delete dhcp.lan\n") {
+		t.Errorf("must not delete the stock section (holds IPv6 config)\n--- batch ---\n%s", dhcp)
+	}
+}

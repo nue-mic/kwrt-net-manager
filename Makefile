@@ -5,7 +5,7 @@ LDFLAGS := -s -w \
     -X github.com/nue-mic/kwrt-net-manager/pkg/version.Number=$(VERSION) \
     -X github.com/nue-mic/kwrt-net-manager/pkg/version.BuildDate=$(BUILD_DATE)
 
-.PHONY: build build-host web web-install test vet tidy clean docker run ipk
+.PHONY: build build-host web web-install test vet tidy clean docker run ipk dist-local dist-docker
 
 # 前端依赖 — 仅在 node_modules 缺失时跑一次完整 install
 web-install:
@@ -54,3 +54,20 @@ run: build-host
 # VERSION 决定 fetcher 默认拉取的二进制版本，发布时由 CI 注入真实版本号。
 ipk:
 	./openwrt/build-ipk.sh --version $(VERSION) --out dist-ipk
+
+# 本机打出与正式发布同名的全套产物：OpenWrt ipk（openwrt-dist/）+ 18 个平台的
+# tar.gz/zip + checksums.txt（dist/）。跨平台编译是纯 Go + CGO_ENABLED=0，不需要
+# 任何 C 工具链，也不需要 Docker。
+#   make dist-local VERSION=0.0.55
+# VERSION 必须是 GitHub Release 上真实存在的版本：ipk 是壳子包，装机时由
+# kwrtmgrd-fetch 按这个版本号去拉对应 CPU 的二进制。
+# 需要 goreleaser 与 nfpm 在 PATH（go install 装的在 `go env GOPATH`/bin）。
+dist-local:
+	./scripts/dist-local.sh --version $(VERSION)
+
+# 同上，但全部在容器里完成（node:20 + golang:1.25，与 CI 同口径），本机除 Docker
+# 外什么都不用装：
+#   make dist-docker VERSION=0.0.55
+# 首次运行要在容器内编译 goreleaser/nfpm，耗时几分钟；产物同样落 dist/ 与 openwrt-dist/。
+dist-docker:
+	./scripts/dist-local.sh --version $(VERSION) --docker

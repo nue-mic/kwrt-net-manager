@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,14 +14,14 @@ import (
 	"testing"
 )
 
-// archRunner 只回答 `uname -m`，其余命令返回空（二进制直装只需要架构）。
+// archRunner 模拟一台「只认得 uname」的机器：没有 opkg/apk，也没装 speedtest-go。
 type archRunner struct{ m string }
 
 func (a *archRunner) Run(_, name string, _ ...string) (string, error) {
 	if name == "uname" {
 		return a.m + "\n", nil
 	}
-	return "", nil
+	return "", errors.New("exit status 127")
 }
 
 func TestAssetArch(t *testing.T) {
@@ -125,5 +126,28 @@ func TestInstallBinaryRejectsNonGzip(t *testing.T) {
 	}
 	if _, err := os.Stat(dst); !os.IsNotExist(err) {
 		t.Error("失败时不应留下任何文件")
+	}
+}
+
+func TestInstallSkipsBinaryFallbackOffLinux(t *testing.T) {
+	// 非 Linux（开发机）上不能去拉 Linux 二进制：既跑不了，"/usr/bin/..." 还会写到
+	// 盘符根目录。必须原样返回包管理器的错误，且一个下载请求都不发。
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	oldBase, oldEnabled := binDownloadBase, binInstallEnabled
+	binDownloadBase, binInstallEnabled = srv.URL+"/dl", false
+	defer func() { binDownloadBase, binInstallEnabled = oldBase, oldEnabled }()
+
+	svc := New(&archRunner{m: "x86_64"}, t.TempDir()) // fake 机器上没有 opkg/apk
+	if _, err := svc.Install(); err == nil {
+		t.Fatal("没有包管理器时应报错")
+	}
+	if hits != 0 {
+		t.Errorf("非 Linux 上不应发起任何下载，实际 %d 次", hits)
 	}
 }

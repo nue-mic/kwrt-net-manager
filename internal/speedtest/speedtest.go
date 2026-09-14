@@ -138,6 +138,9 @@ func (s *Service) Install() (string, error) {
 		return out, nil
 	}
 	logs := strings.TrimSpace(out)
+	if !binInstallEnabled {
+		return logs, err // 非 Linux（开发机）：不做二进制直装，保留包管理器的原始错误
+	}
 	logs += "\n\n=== 包管理器安装失败（" + err.Error() + "），改为直接下载二进制 ===\n"
 	out2, err2 := s.installBinary()
 	logs += strings.TrimSpace(out2)

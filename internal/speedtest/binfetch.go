@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -39,6 +40,9 @@ var (
 	binInstallPath  = "/usr/bin/" + binName
 	// 直连优先，失败再走公共代理（与 selfupdate / kwrtmgrd-fetch 同一批）。
 	binMirrors = []string{"", "https://gh-proxy.com/", "https://ghfast.top/"}
+	// 二进制直装只对 Linux（OpenWrt）有意义：在 Windows/macOS 开发机上拉一个 Linux
+	// 二进制既跑不了，"/usr/bin/..." 还会落到盘符根目录去。
+	binInstallEnabled = runtime.GOOS == "linux"
 )
 
 // assetArch 把 `uname -m` 的输出映射成 speedtest-go 发布资产里的架构名。

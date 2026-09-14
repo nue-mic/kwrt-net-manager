@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { App, Button, Input, Select, Space, Table, Tag, Typography } from 'antd';
+import { App, Button, Input, Select, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import { ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import PageCard from '../components/PageCard';
 import { useNetData, extractErr } from '../hooks/useNetData';
@@ -16,6 +17,24 @@ function formatRemaining(seconds: number): string {
   const s = total % 60;
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
+/** IPv4 转 32 位整数用于排序；非法/非 IPv4 返回 -1（排在最前）。 */
+function ipToNum(ip: string): number {
+  const parts = (ip || '').split('.');
+  if (parts.length !== 4) return -1;
+  let n = 0;
+  for (const p of parts) {
+    const v = Number(p);
+    if (p === '' || !Number.isInteger(v) || v < 0 || v > 255) return -1;
+    n = n * 256 + v;
+  }
+  return n;
+}
+
+/** 排序用的剩余秒数：静态/永久当作最大值（升序排在所有动态租约之后）。 */
+function effRemaining(l: net.Lease): number {
+  return l.static || l.remaining_seconds <= 0 ? Number.MAX_SAFE_INTEGER : l.remaining_seconds;
 }
 
 export default function DhcpLeasesPage() {
@@ -154,9 +173,30 @@ export default function DhcpLeasesPage() {
   }
 
   const columns: ColumnsType<net.Lease> = [
-    { title: '主机名称', dataIndex: 'hostname', key: 'hostname', render: (v: string) => v || '-' },
-    { title: '终端 IP', dataIndex: 'ip', key: 'ip' },
-    { title: '终端 MAC', dataIndex: 'mac', key: 'mac' },
+    {
+      title: '主机名称',
+      dataIndex: 'hostname',
+      key: 'hostname',
+      sorter: (a, b) => (a.hostname || '').localeCompare(b.hostname || '', 'zh'),
+      sortDirections: ['ascend', 'descend'],
+      render: (v: string) => v || '-',
+    },
+    {
+      title: '终端 IP',
+      dataIndex: 'ip',
+      key: 'ip',
+      // 点击表头按 IP 数值（非字符串）正序/倒序排列。
+      sorter: (a, b) => ipToNum(a.ip) - ipToNum(b.ip),
+      sortDirections: ['ascend', 'descend'],
+      showSorterTooltip: { title: '点击按终端 IP 正序 / 倒序排列' },
+    },
+    {
+      title: '终端 MAC',
+      dataIndex: 'mac',
+      key: 'mac',
+      sorter: (a, b) => (a.mac || '').toUpperCase().localeCompare((b.mac || '').toUpperCase()),
+      sortDirections: ['ascend', 'descend'],
+    },
     {
       title: '厂商',
       dataIndex: 'vendor',
@@ -167,6 +207,9 @@ export default function DhcpLeasesPage() {
     {
       title: '有效时间',
       key: 'remaining',
+      // 静态/永久没有剩余时间，按最大值排，升序时排在动态租约之后。
+      sorter: (a, b) => effRemaining(a) - effRemaining(b),
+      sortDirections: ['ascend', 'descend'],
       render: (_, r) =>
         r.static || r.remaining_seconds <= 0 ? '静态/永久' : formatRemaining(r.remaining_seconds),
     },
@@ -174,6 +217,8 @@ export default function DhcpLeasesPage() {
     {
       title: '状态',
       key: 'status',
+      sorter: (a, b) => Number(a.static) - Number(b.static),
+      sortDirections: ['ascend', 'descend'],
       render: (_, r) =>
         r.static ? <Tag color="success">静态分配</Tag> : <Tag color="processing">动态分配</Tag>,
     },
@@ -246,6 +291,11 @@ export default function DhcpLeasesPage() {
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
             />
+            <Tooltip title="刷新终端列表">
+              <Button icon={<ReloadOutlined />} loading={loading} onClick={() => void reload()}>
+                刷新
+              </Button>
+            </Tooltip>
           </Space>
           <Space size="middle" wrap>
             <Button disabled={selected.length === 0} onClick={onBatchReserve}>

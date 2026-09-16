@@ -309,7 +309,7 @@ export default function SpeedtestPage() {
             style={{ marginTop: 12 }}
             dataSource={history}
             columns={historyColumns}
-            pagination={{ ...pageOpts, pageSize: 10, showTotal: (t) => `共 ${t} 次` }}
+            pagination={{ ...pageOpts, defaultPageSize: 10, showTotal: (t) => `共 ${t} 次` }}
             scroll={{ x: 'max-content' }}
           />
         )}
@@ -344,7 +344,7 @@ export default function SpeedtestPage() {
           bordered
           dataSource={filteredServers}
           columns={pickerColumns}
-          pagination={{ ...pageOpts, pageSize: 12, showTotal: (t) => `共 ${t} 个节点` }}
+          pagination={{ ...pageOpts, defaultPageSize: 12, showTotal: (t) => `共 ${t} 个节点` }}
           rowSelection={{
             selectedRowKeys: selectedIds,
             onChange: (keys) => {

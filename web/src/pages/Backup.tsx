@@ -717,7 +717,7 @@ const Backup: React.FC = () => {
           size="small"
           columns={runCols}
           dataSource={runs}
-          pagination={{ ...pageOpts, pageSize: 10, hideOnSinglePage: true }}
+          pagination={{ ...pageOpts, defaultPageSize: 10, hideOnSinglePage: true }}
           locale={{ emptyText: '暂无备份记录' }}
         />
       </Card>
@@ -905,7 +905,7 @@ const Backup: React.FC = () => {
             loading={restoreLoading}
             columns={restoreCols}
             dataSource={restoreObjects}
-            pagination={{ ...pageOpts, pageSize: 12, hideOnSinglePage: true }}
+            pagination={{ ...pageOpts, defaultPageSize: 12, hideOnSinglePage: true }}
             locale={{
               emptyText: <Empty description="该渠道上还没有备份文件（或路径前缀下为空）" />,
             }}

@@ -5,6 +5,7 @@ import { PlusOutlined } from '@ant-design/icons';
 import PageCard from '../components/PageCard';
 import { useNetData, extractErr } from '../hooks/useNetData';
 import * as net from '../api/netcfg';
+import { pageOpts } from '../utils/table';
 
 interface AclForm {
   mac: string;
@@ -210,7 +211,7 @@ export default function DhcpAclPage() {
         dataSource={data.entries}
         rowSelection={{ selectedRowKeys: selected, onChange: (k) => setSelected(k as string[]) }}
         columns={columns}
-        pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (t) => `共 ${t} 条` }}
+        pagination={{ ...pageOpts, showTotal: (t) => `共 ${t} 条` }}
       />
       <Drawer
         title={editing ? '编辑' : '添加'}

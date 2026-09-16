@@ -5,6 +5,7 @@ import { ReloadOutlined } from '@ant-design/icons';
 import PageCard from '../components/PageCard';
 import { useNetData } from '../hooks/useNetData';
 import * as net from '../api/netcfg';
+import { pageOpts } from '../utils/table';
 
 const { Text } = Typography;
 
@@ -363,7 +364,7 @@ export default function NICs() {
         loading={loading}
         dataSource={data}
         columns={columns}
-        pagination={{ pageSize: 20, showTotal: (t) => `共 ${t} 个网卡` }}
+        pagination={{ ...pageOpts, showTotal: (t) => `共 ${t} 个网卡` }}
         scroll={{ x: 'max-content' }}
       />
       <NICDetailDrawer name={detailName} open={drawerOpen} onClose={() => setDrawerOpen(false)} />

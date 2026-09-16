@@ -6,6 +6,7 @@ import PageCard from '../../components/PageCard';
 import { useNetData, extractErr } from '../../hooks/useNetData';
 import type { BatchAction } from '../../api/netcfg';
 import * as dns from '../../api/dns';
+import { pageOpts } from '../../utils/table';
 
 interface RouteForm {
   domain: string;
@@ -163,7 +164,7 @@ export default function DnsDomainRoutesPage() {
         scroll={{ x: 'max-content' }}
         rowSelection={{ selectedRowKeys: selected, onChange: (k) => setSelected(k as string[]) }}
         columns={columns}
-        pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (t) => `共 ${t} 条` }}
+        pagination={{ ...pageOpts, showTotal: (t) => `共 ${t} 条` }}
       />
       <Drawer
         title={editing ? '编辑域名分流' : '添加域名分流'}

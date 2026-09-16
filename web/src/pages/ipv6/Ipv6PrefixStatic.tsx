@@ -7,6 +7,7 @@ import { PlusOutlined } from '@ant-design/icons';
 import PageCard from '../../components/PageCard';
 import { useNetData, extractErr } from '../../hooks/useNetData';
 import * as ipv6 from '../../api/ipv6';
+import { pageOpts } from '../../utils/table';
 
 const { Text } = Typography;
 
@@ -172,7 +173,7 @@ export default function Ipv6PrefixStatic() {
         loading={loading}
         dataSource={data}
         columns={columns}
-        pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (t) => `共 ${t} 条` }}
+        pagination={{ ...pageOpts, showTotal: (t) => `共 ${t} 条` }}
         scroll={{ x: 'max-content' }}
         locale={{ emptyText: '暂无前缀静态分配' }}
       />

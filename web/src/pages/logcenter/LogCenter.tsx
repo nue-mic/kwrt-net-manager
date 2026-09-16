@@ -8,6 +8,7 @@ import PageCard from '../../components/PageCard';
 import { extractErr } from '../../hooks/useNetData';
 import * as logs from '../../api/logs';
 import * as net from '../../api/netcfg';
+import { PAGE_SIZE_OPTIONS } from '../../utils/table';
 
 const { RangePicker } = DatePicker;
 
@@ -227,6 +228,7 @@ export default function LogCenter({ source }: { source: logs.LogSource }) {
           pageSize,
           total,
           showSizeChanger: true,
+          pageSizeOptions: PAGE_SIZE_OPTIONS,
           showTotal: (t) => `共 ${t} 条`,
           onChange: (p, ps) => {
             setPage(p);

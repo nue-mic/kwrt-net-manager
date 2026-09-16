@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import PageCard from '../components/PageCard';
 import client from '../api/client';
 import * as net from '../api/netcfg';
+import { pageOpts } from '../utils/table';
 
 const { Text } = Typography;
 
@@ -472,7 +473,7 @@ export default function Dashboard() {
           rowKey={(r) => `${r.proto}-${r.src}-${r.dst}`}
           size="small"
           dataSource={filteredFlows}
-          pagination={{ pageSize: 20, showTotal: (t) => `共 ${t} 条（按流量降序）` }}
+          pagination={{ ...pageOpts, showTotal: (t) => `共 ${t} 条（按流量降序）` }}
           scroll={{ x: 'max-content' }}
           locale={{ emptyText: '暂无连接（或本机无 conntrack）' }}
           columns={[

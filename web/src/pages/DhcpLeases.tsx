@@ -7,6 +7,7 @@ import PageCard from '../components/PageCard';
 import { useNetData, extractErr } from '../hooks/useNetData';
 import * as net from '../api/netcfg';
 import { cmpIp, cmpText } from '../utils/sort';
+import { pageOpts } from '../utils/table';
 
 const ALL = '__all__';
 
@@ -311,7 +312,7 @@ export default function DhcpLeasesPage() {
         }}
         columns={columns}
         scroll={{ x: 'max-content' }}
-        pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (t) => `共 ${t} 条` }}
+        pagination={{ ...pageOpts, showTotal: (t) => `共 ${t} 条` }}
       />
     </PageCard>
   );

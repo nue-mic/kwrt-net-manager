@@ -6,6 +6,7 @@ import PageCard from '../components/PageCard';
 import { useNetData, extractErr } from '../hooks/useNetData';
 import type { BatchAction } from '../api/netcfg';
 import * as net from '../api/netcfg';
+import { pageOpts } from '../utils/table';
 
 interface RuleForm {
   family: 'ipv4' | 'ipv6';
@@ -180,7 +181,7 @@ export default function PolicyRulesPage() {
         scroll={{ x: 'max-content' }}
         rowSelection={{ selectedRowKeys: selected, onChange: (k) => setSelected(k as string[]) }}
         columns={columns}
-        pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (t) => `共 ${t} 条` }}
+        pagination={{ ...pageOpts, showTotal: (t) => `共 ${t} 条` }}
       />
       <Drawer
         title={editing ? '编辑策略路由' : '添加策略路由'}

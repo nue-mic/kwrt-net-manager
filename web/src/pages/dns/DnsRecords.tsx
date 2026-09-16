@@ -6,6 +6,7 @@ import PageCard from '../../components/PageCard';
 import { useNetData, extractErr } from '../../hooks/useNetData';
 import type { BatchAction } from '../../api/netcfg';
 import * as dns from '../../api/dns';
+import { pageOpts } from '../../utils/table';
 
 interface RecordForm {
   mode: 'resolve' | 'block';
@@ -178,7 +179,7 @@ export default function DnsRecordsPage() {
         scroll={{ x: 'max-content' }}
         rowSelection={{ selectedRowKeys: selected, onChange: (k) => setSelected(k as string[]) }}
         columns={columns}
-        pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (t) => `共 ${t} 条` }}
+        pagination={{ ...pageOpts, showTotal: (t) => `共 ${t} 条` }}
       />
       <Drawer
         title={editing ? '编辑自定义解析' : '添加自定义解析'}

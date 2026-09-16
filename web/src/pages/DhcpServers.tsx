@@ -23,6 +23,7 @@ import { PlusOutlined, ThunderboltOutlined, ReloadOutlined } from '@ant-design/i
 import PageCard from '../components/PageCard';
 import { useNetData, extractErr } from '../hooks/useNetData';
 import * as net from '../api/netcfg';
+import { pageOpts } from '../utils/table';
 
 // 由接口 IP + 掩码推默认 DHCP 地址池起止。
 // /24（255.255.255.0）时把末段换成 .100~.200；其余掩码退化为留空（让用户自填，避免给出错误范围）。
@@ -510,7 +511,7 @@ export default function DhcpServersPage() {
           onChange: (keys) => setSelected(keys as string[]),
         }}
         columns={columns}
-        pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (t) => `共 ${t} 条` }}
+        pagination={{ ...pageOpts, showTotal: (t) => `共 ${t} 条` }}
       />
 
       <Drawer

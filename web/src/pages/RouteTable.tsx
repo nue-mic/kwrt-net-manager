@@ -6,6 +6,7 @@ import PageCard from '../components/PageCard';
 import { extractErr } from '../hooks/useNetData';
 import { useEventSubscription } from '../events/EventStreamContext';
 import * as net from '../api/netcfg';
+import { pageOpts } from '../utils/table';
 
 type Family = 'ipv4' | 'ipv6';
 
@@ -70,7 +71,7 @@ export default function RouteTablePage() {
         loading={loading}
         dataSource={rows}
         columns={columns}
-        pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (t) => `共 ${t} 条` }}
+        pagination={{ ...pageOpts, showTotal: (t) => `共 ${t} 条` }}
       />
     </PageCard>
   );

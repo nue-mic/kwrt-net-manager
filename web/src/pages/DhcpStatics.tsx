@@ -23,6 +23,7 @@ import PageCard from '../components/PageCard';
 import { useNetData, extractErr } from '../hooks/useNetData';
 import * as net from '../api/netcfg';
 import { cmpIp, cmpText } from '../utils/sort';
+import { pageOpts } from '../utils/table';
 
 /** 点击表头：升序 → 降序 → 取消（回到后端返回的原顺序）。 */
 const SORT_DIRS: ('ascend' | 'descend')[] = ['ascend', 'descend'];
@@ -332,7 +333,7 @@ export default function DhcpStaticsPage() {
           onChange: (keys) => setSelected(keys as string[]),
         }}
         columns={columns}
-        pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (t) => `共 ${t} 条` }}
+        pagination={{ ...pageOpts, showTotal: (t) => `共 ${t} 条` }}
       />
       <Drawer
         title={editing ? '编辑静态分配' : '添加静态分配'}

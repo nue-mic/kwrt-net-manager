@@ -6,6 +6,7 @@ import PageCard from '../../components/PageCard';
 import { useNetData, extractErr } from '../../hooks/useNetData';
 import type { BatchAction } from '../../api/netcfg';
 import * as ddns from '../../api/ddns';
+import { pageOpts } from '../../utils/table';
 
 interface DdnsForm {
   provider: string;
@@ -255,7 +256,7 @@ export default function DdnsListPage() {
         scroll={{ x: 'max-content' }}
         rowSelection={{ selectedRowKeys: selected, onChange: (k) => setSelected(k as string[]) }}
         columns={columns}
-        pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (t) => `共 ${t} 条` }}
+        pagination={{ ...pageOpts, showTotal: (t) => `共 ${t} 条` }}
       />
       <Drawer
         title={editing ? '编辑动态域名' : '添加动态域名'}

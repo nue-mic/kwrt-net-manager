@@ -6,6 +6,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer
 import PageCard from '../../components/PageCard';
 import { extractErr } from '../../hooks/useNetData';
 import * as st from '../../api/speedtest';
+import { pageOpts } from '../../utils/table';
 
 const { Text } = Typography;
 const MAX_NODES = 8;
@@ -308,7 +309,7 @@ export default function SpeedtestPage() {
             style={{ marginTop: 12 }}
             dataSource={history}
             columns={historyColumns}
-            pagination={{ pageSize: 10, showTotal: (t) => `共 ${t} 次` }}
+            pagination={{ ...pageOpts, pageSize: 10, showTotal: (t) => `共 ${t} 次` }}
             scroll={{ x: 'max-content' }}
           />
         )}
@@ -343,7 +344,7 @@ export default function SpeedtestPage() {
           bordered
           dataSource={filteredServers}
           columns={pickerColumns}
-          pagination={{ pageSize: 12, showTotal: (t) => `共 ${t} 个节点` }}
+          pagination={{ ...pageOpts, pageSize: 12, showTotal: (t) => `共 ${t} 个节点` }}
           rowSelection={{
             selectedRowKeys: selectedIds,
             onChange: (keys) => {

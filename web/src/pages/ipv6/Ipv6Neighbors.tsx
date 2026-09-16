@@ -4,6 +4,7 @@ import type { ColumnsType } from 'antd/es/table';
 import PageCard from '../../components/PageCard';
 import { useNetData, extractErr } from '../../hooks/useNetData';
 import * as ipv6 from '../../api/ipv6';
+import { pageOpts } from '../../utils/table';
 
 const { Text } = Typography;
 
@@ -120,7 +121,7 @@ export default function Ipv6Neighbors() {
         loading={loading}
         dataSource={filtered}
         columns={columns}
-        pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (t) => `共 ${t} 条` }}
+        pagination={{ ...pageOpts, showTotal: (t) => `共 ${t} 条` }}
         scroll={{ x: 'max-content' }}
         locale={{ emptyText: '暂无 IPv6 邻居' }}
       />

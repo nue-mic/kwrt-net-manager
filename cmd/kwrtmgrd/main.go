@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -122,6 +123,20 @@ func runServe(args []string) int {
 	logs := logcenter.New(cfg.DataDir, logger)
 	// store 后端(非 OpenWrt)无 logread → 拨号实时流推送脚本化模拟序列，便于 Windows/CI 演示。
 	logs.SetSimulate(nbe.Kind() == "store")
+	// 让 ARP 监控能判「实际在线 MAC 与静态分配绑定不符」（IP 被占用/冒用）。
+	logs.SetStaticBindings(func() map[string]string {
+		statics, err := nsvc.ListStatics()
+		if err != nil {
+			return nil
+		}
+		out := make(map[string]string, len(statics))
+		for _, s := range statics {
+			if s.Enabled && s.IP != "" && s.MAC != "" {
+				out[s.IP] = strings.ToLower(s.MAC)
+			}
+		}
+		return out
+	})
 	arpCtx, arpCancel := context.WithCancel(context.Background())
 	defer arpCancel()
 	logs.StartARPMonitor(arpCtx, 20*time.Second)

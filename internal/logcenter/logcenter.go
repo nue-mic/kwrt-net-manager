@@ -112,7 +112,7 @@ type Entry struct {
 	Severity  string `json:"severity,omitempty"`   // info|success|warning|error
 	Diagnosis string `json:"diagnosis,omitempty"`  // 中文诊断（命中模式表才有）
 	Advice    string `json:"advice,omitempty"`     // 中文处置建议
-	Seq       uint64 `json:"seq,omitempty"`         // 实时流内单调序号，前端去重/续传
+	Seq       uint64 `json:"seq,omitempty"`        // 实时流内单调序号，前端去重/续传
 }
 
 // Filter 是查询过滤条件。
@@ -133,22 +133,32 @@ type Result struct {
 
 // Center 是日志中心。
 type Center struct {
-	run      Runner
-	dir      string // DATA_DIR/logs
-	log      *slog.Logger
-	loc      *time.Location // 机器本地时区（守护进程常跑在 UTC，须按系统时区显示/换算）
-	mu       sync.Mutex
-	arpSeen  map[string]string // ip -> last mac（ARP 差分基线）
-	simulate bool              // true=拨号流推送脚本化模拟序列（非 OpenWrt/store 后端演示用）
-	dial     *dialStream       // 拨号实时日志：单例 logread -f + 环形缓冲 + 多订阅广播
+	run       Runner
+	dir       string // DATA_DIR/logs
+	log       *slog.Logger
+	loc       *time.Location // 机器本地时区（守护进程常跑在 UTC，须按系统时区显示/换算）
+	mu        sync.Mutex
+	arpSeen   map[string]string    // "dev|ip" -> last mac（ARP 差分基线）
+	arpLogged map[string]time.Time // 事件 key -> 上次记录时间（窗口抑制，防刷屏）
+	// staticBindings 可选注入：ip -> 静态分配绑定的 mac（小写），用于「实际 MAC 与
+	// 绑定不符」告警。未注入则跳过该项检测（logcenter 不反向依赖 netcfg）。
+	staticBindings func() map[string]string
+	simulate       bool        // true=拨号流推送脚本化模拟序列（非 OpenWrt/store 后端演示用）
+	dial           *dialStream // 拨号实时日志：单例 logread -f + 环形缓冲 + 多订阅广播
 }
+
+// SetStaticBindings 注入静态分配表（ip -> mac）。由 main 接上 netcfg.Service。
+func (c *Center) SetStaticBindings(fn func() map[string]string) { c.staticBindings = fn }
 
 // New 构造 Center。dataDir 为数据根目录（自管日志落 dataDir/logs）。
 func New(dataDir string, log *slog.Logger) *Center {
 	if log == nil {
 		log = slog.Default()
 	}
-	c := &Center{run: execRunner{}, dir: filepath.Join(dataDir, "logs"), log: log, arpSeen: map[string]string{}}
+	c := &Center{
+		run: execRunner{}, dir: filepath.Join(dataDir, "logs"), log: log,
+		arpSeen: map[string]string{}, arpLogged: map[string]time.Time{},
+	}
 	c.loc = detectLoc(c.run)
 	c.dial = newDialStream(c)
 	_ = os.MkdirAll(c.dir, 0o755)
@@ -328,30 +338,131 @@ func (c *Center) StartARPMonitor(ctx context.Context, interval time.Duration) {
 
 var reNeigh = regexp.MustCompile(`^(\S+)\s+dev\s+(\S+)\s+lladdr\s+([0-9a-fA-F:]{17})\s+(\S+)`)
 
+// ARP 事件类型：只有后两者才是真正值得警惕的，单纯的地址变化是信息级。
+const (
+	arpTypeChanged  = "ARP地址变化" // 同一 IP 换了 MAC：漫游 / 换设备 / 随机 MAC，常见且无害
+	arpTypeMultiIP  = "疑似ARP欺骗" // 一个 MAC 同时占用多个 IPv4：欺骗的典型特征
+	arpTypeConflict = "与静态分配冲突" // 实际 MAC 与面板里的静态绑定不符
+)
+
+// arpDedupWindow 是同一事件的抑制窗口：邻居表在 REACHABLE/STALE/DELAY 之间抖动时
+// 同一条变化会被反复看见，没有窗口就会刷屏（实测一台家用路由 16 天刷出 170+ 条）。
+const arpDedupWindow = 30 * time.Minute
+
+// isIPv4 判断邻居表里的地址是不是 IPv4。ARP 只存在于 IPv4；IPv6 用的是 NDP，
+// 把 fe80:: 邻居也记成「ARP 欺骗」纯属噪声。
+func isIPv4(ip string) bool {
+	if strings.Contains(ip, ":") {
+		return false
+	}
+	return strings.Count(ip, ".") == 3
+}
+
+// arpShouldLog 按 key 做窗口抑制：窗口内重复的同一事件直接丢弃。
+func (c *Center) arpShouldLog(key string, now time.Time) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if last, ok := c.arpLogged[key]; ok && now.Sub(last) < arpDedupWindow {
+		return false
+	}
+	c.arpLogged[key] = now
+	return true
+}
+
 func (c *Center) scanARP(seed bool) {
 	out, err := c.run.Run("ip", "neigh")
 	if err != nil || strings.TrimSpace(out) == "" {
 		return
 	}
+	now := time.Now()
+	ipsByMAC := map[string][]string{} // mac -> 它当前占用的 IPv4（判多 IP 欺骗用）
+	devByMAC := map[string]string{}
+
 	for _, line := range strings.Split(out, "\n") {
 		m := reNeigh.FindStringSubmatch(strings.TrimSpace(line))
 		if m == nil {
 			continue
 		}
-		ip, dev, mac := m[1], m[2], strings.ToLower(m[3])
+		ip, dev, mac, state := m[1], m[2], strings.ToLower(m[3]), strings.ToUpper(m[4])
+		if !isIPv4(ip) {
+			continue // IPv6 邻居是 NDP，不属于 ARP
+		}
+		// FAILED/INCOMPLETE 是「没解析出来」，其 lladdr 是上一次的残留，拿它比对只会产生假变化。
+		if state == "FAILED" || state == "INCOMPLETE" {
+			continue
+		}
+		ipsByMAC[mac] = append(ipsByMAC[mac], ip)
+		devByMAC[mac] = dev
+
+		key := dev + "|" + ip // 同一 IP 可能出现在多个接口上，分开记基线
 		c.mu.Lock()
-		prev, seen := c.arpSeen[ip]
-		c.arpSeen[ip] = mac
+		prev, seen := c.arpSeen[key]
+		c.arpSeen[key] = mac
 		c.mu.Unlock()
 		if seed || !seen || prev == mac {
-			continue // 只记录「同一 IP 的 MAC 发生变化」＝疑似欺骗/冲突，与爱快一致
+			continue
 		}
-		now := time.Now()
+		if !c.arpShouldLog("chg|"+key+"|"+prev+"|"+mac, now) {
+			continue
+		}
 		c.appendEntry(SourceARP, Entry{
 			Time: now.In(c.loc).Format("2006-01-02 15:04:05"), TS: now.Unix(),
-			Type: "疑似ARP欺骗", Iface: dev, IP: ip, MAC: mac,
-			Message: fmt.Sprintf("检测到一个 ARP 地址变化在接口(%s): %s %s -> %s", dev, ip, prev, mac),
+			Type: arpTypeChanged, Iface: dev, IP: ip, MAC: mac,
+			Message: fmt.Sprintf("接口(%s) 上 %s 的 MAC 发生变化: %s -> %s（设备漫游/更换/随机 MAC 都会如此，偶发属正常）", dev, ip, prev, mac),
 		})
+	}
+	if seed {
+		return
+	}
+	c.reportARPSpoof(ipsByMAC, devByMAC, now)
+	c.reportARPConflict(ipsByMAC, devByMAC, now)
+}
+
+// reportARPSpoof 记录「一个 MAC 同时占用多个 IPv4」——这才是 ARP 欺骗的典型特征
+// （攻击方替多个受害 IP 应答）。良性成因也有：无线中继/AP 替下挂客户端代答 ARP。
+func (c *Center) reportARPSpoof(ipsByMAC map[string][]string, devByMAC map[string]string, now time.Time) {
+	for mac, ips := range ipsByMAC {
+		if len(ips) < 2 {
+			continue
+		}
+		sort.Strings(ips)
+		list := strings.Join(ips, ", ")
+		if !c.arpShouldLog("multi|"+mac+"|"+list, now) {
+			continue
+		}
+		c.appendEntry(SourceARP, Entry{
+			Time: now.In(c.loc).Format("2006-01-02 15:04:05"), TS: now.Unix(),
+			Type: arpTypeMultiIP, Iface: devByMAC[mac], IP: ips[0], MAC: mac,
+			Message: fmt.Sprintf("同一 MAC %s 同时占用 %d 个 IP: %s（ARP 欺骗的典型特征；若是自家的无线中继/AP 代答则属正常）", mac, len(ips), list),
+		})
+	}
+}
+
+// reportARPConflict 记录「实际 MAC 与静态分配绑定不符」：该 IP 被别的设备占着，
+// 要么有人手动配了同一个 IP，要么被冒用。未注入静态绑定时（未接 netcfg）跳过。
+func (c *Center) reportARPConflict(ipsByMAC map[string][]string, devByMAC map[string]string, now time.Time) {
+	if c.staticBindings == nil {
+		return
+	}
+	bound := c.staticBindings() // ip -> 绑定的 mac（小写）
+	if len(bound) == 0 {
+		return
+	}
+	for mac, ips := range ipsByMAC {
+		for _, ip := range ips {
+			want, ok := bound[ip]
+			if !ok || want == mac {
+				continue
+			}
+			if !c.arpShouldLog("conflict|"+ip+"|"+mac, now) {
+				continue
+			}
+			c.appendEntry(SourceARP, Entry{
+				Time: now.In(c.loc).Format("2006-01-02 15:04:05"), TS: now.Unix(),
+				Type: arpTypeConflict, Iface: devByMAC[mac], IP: ip, MAC: mac,
+				Message: fmt.Sprintf("%s 的静态分配绑定的是 %s，实际在线的却是 %s（IP 被占用或被冒用）", ip, want, mac),
+			})
+		}
 	}
 }
 

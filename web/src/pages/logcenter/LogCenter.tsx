@@ -91,10 +91,17 @@ const META: Record<logs.LogSource, SourceMeta> = {
     title: 'ARP日志',
     breadcrumb: ['日志中心', '用户日志', 'ARP日志'],
     clearable: true,
-    note: '来源：本工具轮询 ip neigh 差分，记录同一 IP 的 MAC 变化（疑似 ARP 欺骗/冲突）。',
+    note: '来源：本工具轮询 ip neigh 差分。「ARP地址变化」只是记录（设备漫游、换机、手机随机 MAC 都会触发，偶发属正常）；「疑似ARP欺骗」= 一个 MAC 同时占用多个 IP；「与静态分配冲突」= 实际在线 MAC 与绑定不符。',
     columns: [
       { title: '时间', dataIndex: 'time', width: 170 },
-      { title: '类型', dataIndex: 'type', width: 120, render: (v: string) => (v ? <Tag color="warning">{v}</Tag> : '-') },
+      {
+        title: '类型',
+        dataIndex: 'type',
+        width: 130,
+        // 只有后两类是真正要警惕的，地址变化是信息级，别用同一个警告色吓人。
+        render: (v: string) =>
+          v ? <Tag color={v === 'ARP地址变化' ? 'default' : v === '疑似ARP欺骗' ? 'error' : 'warning'}>{v}</Tag> : '-',
+      },
       { title: '接口', dataIndex: 'iface', width: 90, render: (v: string) => v || '-' },
       { title: 'IP', dataIndex: 'ip', width: 150, render: (v: string) => v || '-' },
       { title: 'MAC', dataIndex: 'mac', width: 160, render: (v: string) => v || '-' },
